@@ -93,20 +93,19 @@ harmdata$showScore = ifelse(harmdata$showScore=="true",1,0)
 harmdata = harmdata[,!(names(harmdata) == "gameNumber")]
 
 #Other variables
-load("~/Documents/Projects/harming_esn/Data/ndata_individual.Rdata")
-ndata1$superid = 100*ndata1$game+as.numeric(substr(ndata1$id,2,nchar(ndata1$id))) #the last two digits are the id in the game. 
-age_gender = ndata1 %>% dplyr::select(superid, round, age, gender) %>% 
-                      mutate(age = as.numeric(unlist(age)),
-                      gender = as.character(unlist(gender)))
-harmdata = merge(harmdata, age_gender, all.x = T, by = c("superid", "round"))
-
+harmdata$age = as.numeric(unlist(harmdata$age))
+harmdata$gender = as.character(unlist(harmdata$gender))
+harmdata$ipAddress = as.character(unlist(harmdata$ipAddress))
+```
+```{r}
 #Making the minimum data
-data0 = harmdata %>% dplyr::select(game, superid, round, age, gender, showScore, 
-                           initial_score, payoff, cumulativePayoff, cPayoffS, 
-                           WealthLevel, behavior_coop, behavior_defect, 
-                           behavior_punish, local_rate_coop, 
-                           local_rate_defect, local_rate_punish, happ, 
-                           behaviorTime, degree)
+data0 = harmdata %>% dplyr::select(game, superid, round, age, gender, ipAddress,
+                                   showScore, initial_score, payoff, 
+                                   cumulativePayoff, cPayoffS, 
+                                   WealthLevel, behavior_coop, behavior_defect, 
+                                   behavior_punish, local_rate_coop, 
+                                   local_rate_defect, local_rate_punish, happ, 
+                                   behaviorTime, degree)
 
 ```
 
@@ -124,8 +123,6 @@ data1$log_behaviorTime = log10(data1$behaviorTime)
 data1$log_behaviorTime_lag = log10(data1$behaviorTime_lag)
 
 table(data1$behavior_coop) #5849/4878
-summary(zelig(data = data1, behavior_coop ~ showScore + age + gender, model = "logit"))
-#showScore = -0.175
 ```
 
 ## Analysis
@@ -136,13 +133,18 @@ What are the characteristics of people who chose to attack (=performing costly s
 
 #### 1a) Using the binary attack indicator (so factors influencing specific individual choices) 
     
-```{r paged.print=TRUE}
+```{r}
 data1_cc = na.omit(data1)
 dim(data1_cc)
+```
 
+```{R}
+table(as.character(unlist(ndata1$attentive)))
+```
+
+```{r}
 m1 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + log_behaviorTime + log_behaviorTime_lag + factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 
-print(m1, corr = FALSE)
 se = sqrt(diag(vcov(m1)))
 # table of estimates with 95% CI
 tab_m1 = cbind(Est = fixef(m1), LL = fixef(m1) - 1.96 * se, UL = fixef(m1) + 1.96 * se)
@@ -156,6 +158,7 @@ se = sqrt(diag(vcov(m2)))
 tab_m2 = cbind(Est = fixef(m2), LL = fixef(m2) - 1.96 * se, UL = fixef(m2) + 1.96 * se)
 round(exp(tab_m2), digits = 3)[1:12,]
 ```
+
 ```{r}
 m3 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag+ factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 se = sqrt(diag(vcov(m3)))
@@ -223,17 +226,42 @@ ever_cooperator = unique(harmdata %>% group_by(superid) %>% filter(behavior_coop
 harmdata$ever_attacker = ifelse(harmdata$superid %in% ever_attackers, 1, 0)
 harmdata$ever_cooperator = ifelse(harmdata$superid %in% ever_cooperator, 1, 0)
 
+# Convert IPaddress to country
+library(rgeolocate)
+file = system.file("extdata","GeoLite2-Country.mmdb", package = "rgeolocate")
+ipCountries = maxmind(harmdata$ipAddress, file, "country_name")
+harmdata$country = ipCountries$country_name
+table(harmdata$country) #messy
+
+`%notin%` <- Negate(`%in%`)
+
+harmdata = harmdata %>% mutate(country_3cat = case_when(country == "United States" ~ "US",
+                                                        country == "India" ~ "India",
+                                                        country %notin% c("United States", "India") ~ "Other"))
+
+harmdata = harmdata %>% mutate(country_3cat = factor(country_3cat, levels = c("US", "India", "Other")))
+
+harmdata_clean = na.omit(harmdata)
+
 # use round 2 + take non-varying variables
 # check non-varying if usable - show other sociodemographic variables
 # IP address - country of origin?
 
-m4 = glmer(ever_attacker ~ showScore + age + gender + (1|game), data = harmdata, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+harmdata_no_rep = harmdata %>% filter(round == 2)
+
+# add PANAS variables
+m4 = glmer(ever_attacker ~ showScore + age + gender + country_3cat + (1|game), data = harmdata_no_rep, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 
 se = sqrt(diag(vcov(m4)))
 # table of estimates with 95% CI
 tab_m4 = cbind(Est = fixef(m4), LL = fixef(m4) - 1.96 * se, UL = fixef(m4) + 1.96 * se)
-round(exp(tab_m4), digits = 3)
+round(exp(tab_m4), digits = 3) #Indian users more likely to choose punish?
+
+xtabs(~country_3cat + ever_attacker, harmdata_no_rep) # maybe - have less Indian users + more punishers overall
 ```
+
+**note**:
+Do naturally aggressive people learn to be less aggressive over games played with less aggressive players?
 
 1c) Looking at trends of harming over every round
 
@@ -295,6 +323,7 @@ data0_sum %>% filter(game %in% 26:50) %>% ggplot() +
   ylab("Mean Local Punish Rate") +
   theme(legend.position = c("none"))
 ```
+
 2. Does longer thinking time stop attacks?
 
 Seems like more deliberation -> higher chance of attack. Less change in terms of rate of cooperation
@@ -339,12 +368,264 @@ summary(data1[is.na(data1$behaviorTime)==0 & data1$behaviorTime>=9000 & data1$be
     a) Identify attack patterns - first, create a new dataset that characterizes behavior by each actor in consecutive rounds.
     
 ```{r}
+# Want the unit to be paired values
+# Basically want to combine the lag/cumulative values
+# Group variables: superid, game
+# Unit variables: round (should be round + round+1), behavior in consecutive rounds (i.e. behavior_lag + behavior?)
+# Lag + behavior (current round) represents consecutive choices
+# Other things: local rate/behavior time/cpayoffs? - want diffs or means/medians? 
 
+data1_consecutive = data1_cc
 
+# Create new data where one row = 2 consecutive choices
+data1_consecutive = data1_consecutive %>% mutate(behavior = case_when(behavior_coop == 1 ~ "C",
+                                                  behavior_defect == 1 ~ "D",
+                                                  behavior_punish == 1 ~ "P"),
+                             behavior_lag = case_when(behavior_coop_lag == 1 ~ "C",
+                                                      behavior_defect_lag == 1 ~ "D",
+                                                      behavior_punish_lag == 1 ~ "P"),
+                             behavior_pair = paste0(behavior_lag, behavior), #pair is prev+current
+                             round_pair = paste0(as.character(round-1), as.character(round)),
+                             happ_diff = happ - happ_lag,
+                             cPayoffS_diff = cPayoffS - cPayoffS_lag,
+                             degree_diff = degree - degree_lag,
+                             behaviorTime_diff = behaviorTime - behaviorTime_lag) %>%
+                      dplyr::select(superid, behavior_pair, round_pair, age, gender, showScore, initial_score, happ_diff,
+                                    cPayoffS_diff, degree_diff, behaviorTime_diff)
 
 ```
 
+```{r}
+#Try regression where outcome is behavior pair?
+# Exclude round 0/1
+# Maybe set CC to reference (most common pair)
+`%notin%` <- Negate(`%in%`)
+table(data1_consecutive$behavior_pair)
+data1_cs_short = data1_consecutive %>% filter(round_pair %notin% c(-10, 01)) %>% 
+  mutate(behavior_pair = factor(behavior_pair, levels = c("CC", "CD", "CP", "DD", "DC", "DP", "PC", "PD", "PP")),
+         behavior_pair2 = case_when(behavior_pair %in% c("CC", "CD", "CP", "DD", "DC", "DP") ~ 0,
+                                    behavior_pair == "PC" ~ 1,
+                                    behavior_pair == "PD" ~ 2,
+                                    behavior_pair == "PP" ~ 3))
+
+```
+
+```{r}
+# Try multinomial regression
+names(data1_cs_short)
+
+library(nnet)
+library(broom)
+
+model5 = multinom(behavior_pair2 ~ age + gender + showScore + initial_score + happ_diff + cPayoffS_diff + degree_diff + behaviorTime_diff, data = data1_cs_short)
+model5_result = tidy(model5, conf.int = T, conf.level = 0.95, exponentiate = TRUE) %>% dplyr::select(y.level, term, estimate, conf.low, conf.high)
+model5_coefs = model5_result %>% dplyr::select(estimate, conf.low, conf.high)
+model5_result2 = cbind(model5_result$y.level, model5_result$term, model5_coefs)
+model5_result2
+
+# model5 = glm(behavior_pair2 ~ age + gender + showScore + initial_score + happ_diff + cPayoffS_diff + degree_diff + behaviorTime_diff, family = "binomial", data = data1_cs_short)
+# summary(model5)
+```
+```{r}
+# Multilevel multinomial?
+```
+
 How to visualize this? Network visualization? 2D visual of progress showing each actor's strategy?
+
+---
+
+# Next steps for this
+
+Add a lag 2 set of variables
+
+Interaction between lag1 and lag2
+
+---
+
+## 2. Building a network representation of activity
+
+```{r}
+load("~/Documents/Projects/harming_esn/Data/harming_jsons/link_1aX.Rdata")
+load("~/Documents/Projects/harming_esn/Data/ndata_individual.Rdata")
+
+library(igraph)
+library(tidygraph)
+library(RColorBrewer)
+
+ndata1_r0 = ndata1 %>% filter(game == 1, round == 0) %>% relocate(id) %>% unnest()
+ndata1_r1 = ndata1 %>% filter(game == 1, round == 1) %>% relocate(id)
+ndata1_r1 = ndata1 %>% filter(game == 1, round == 1) %>% relocate(id) 
+ndata1_r2 = ndata1 %>% filter(game == 1, round == 2) %>% relocate(id) 
+ndata1_r3 = ndata1 %>% filter(game == 1, round == 3) %>% relocate(id) 
+ndata1_r4 = ndata1 %>% filter(game == 1, round == 4) %>% relocate(id) 
+ndata1_r5 = ndata1 %>% filter(game == 1, round == 5) %>% relocate(id) 
+ndata1_r6 = ndata1 %>% filter(game == 1, round == 6) %>% relocate(id) 
+ndata1_r7 = ndata1 %>% filter(game == 1, round == 7) %>% relocate(id) 
+ndata1_r8 = ndata1 %>% filter(game == 1, round == 8) %>% relocate(id) 
+ndata1_r9 = ndata1 %>% filter(game == 1, round == 9) %>% relocate(id) 
+ndata1_r10 = ndata1 %>% filter(game == 1, round == 10) %>% relocate(id) 
+ndata1_r11 = ndata1 %>% filter(game == 1, round == 11) %>% relocate(id) 
+ndata1_r12 = ndata1 %>% filter(game == 1, round == 12) %>% relocate(id) 
+ndata1_r13 = ndata1 %>% filter(game == 1, round == 13) %>% relocate(id) 
+ndata1_r14 = ndata1 %>% filter(game == 1, round == 14) %>% relocate(id) 
+ndata1_r15 = ndata1 %>% filter(game == 1, round == 15) %>% relocate(id) 
+
+# For game 1
+game1_round0_edgelist = ldata %>% filter(game == 1, round == 0) %>% dplyr::select(id1, id2)
+g0 = graph_from_data_frame(game1_round0_edgelist, directed = T, vertices = ndata1_r0)
+pal = brewer.pal(length(unique(V(g0)$behavior_punish)), "Set1") #Red = D, Blue = C, Green = P
+p0 = plot(g0, 
+     layout = coords, 
+     vertex.color = pal[as.numeric(as.factor(vertex_attr(g0, "behavior_coop")))])
+coords = layout.auto(g0)
+
+game1_round1_edgelist = ldata %>% filter(game == 1, round == 1) %>% dplyr::select(id1, id2)
+g1 = graph_from_data_frame(game1_round1_edgelist, directed = T, vertices = ndata1_r1)
+p1 = plot(g1, 
+     layout = coords,
+     vertex.color = pal[as.numeric(as.factor(vertex_attr(g1, "behavior_coop")))])
+
+game1_round2_edgelist = ldata %>% filter(game == 1, round == 2) %>% dplyr::select(id1, id2)
+g2 = graph_from_data_frame(game1_round2_edgelist, directed = T, vertices = ndata1_r2)
+p2 = plot(g2, 
+     layout = coords,
+     vertex.color = pal[as.numeric(as.factor(vertex_attr(g2, "behavior_coop")))])
+
+game1_round3_edgelist = ldata %>% filter(game == 1, round == 3) %>% dplyr::select(id1, id2)
+g3 = graph_from_data_frame(game1_round3_edgelist, directed = T, vertices = ndata1_r3)
+p3 = plot(g3, 
+     layout = coords,
+     vertex.color = pal[as.numeric(as.factor(vertex_attr(g3, "behavior_coop")))])
+
+game1_round4_edgelist = ldata %>% filter(game == 1, round == 4) %>% dplyr::select(id1, id2)
+g4 = graph_from_data_frame(game1_round4_edgelist, directed = T, vertices = ndata1_r4)
+p4 = plot(g4, 
+     layout = coords,
+     vertex.color = pal[as.numeric(as.factor(vertex_attr(g4, "behavior_coop")))])
+
+game1_round5_edgelist = ldata %>% filter(game == 1, round == 5) %>% dplyr::select(id1, id2)
+g5 = graph_from_data_frame(game1_round5_edgelist, directed = T, vertices = ndata1_r5)
+p5 = plot(g5, 
+     layout = coords,
+     vertex.color = pal[as.numeric(as.factor(vertex_attr(g5, "behavior_coop")))])
+
+game1_round6_edgelist = ldata %>% filter(game == 1, round == 6) %>% dplyr::select(id1, id2)
+g6 = graph_from_data_frame(game1_round6_edgelist, directed = T, vertices = ndata1_r6)
+p6 = plot(g6, 
+     layout = coords,
+     vertex.color = pal[as.numeric(as.factor(vertex_attr(g6, "behavior_coop")))])
+game1_round7_edgelist = ldata %>% filter(game == 1, round == 7) %>% dplyr::select(id1, id2)
+g7 = graph_from_data_frame(game1_round7_edgelist, directed = T, vertices = ndata1_r7)
+p7 = plot(g7, 
+     layout = coords,
+     vertex.color = pal[as.numeric(as.factor(vertex_attr(g7, "behavior_coop")))])
+game1_round8_edgelist = ldata %>% filter(game == 1, round == 8) %>% dplyr::select(id1, id2)
+g8 = graph_from_data_frame(game1_round8_edgelist, directed = T, vertices = ndata1_r8)
+p8 = plot(g8, 
+     layout = coords,
+     vertex.color = pal[as.numeric(as.factor(vertex_attr(g8, "behavior_coop")))])
+
+game1_round9_edgelist = ldata %>% filter(game == 1, round == 9) %>% dplyr::select(id1, id2)
+g9 = graph_from_data_frame(game1_round9_edgelist, directed = T, vertices = ndata1_r9)
+p9 = plot(g9, 
+     layout = coords,
+     vertex.color = pal[as.numeric(as.factor(vertex_attr(g9, "behavior_coop")))])
+
+game1_round10_edgelist = ldata %>% filter(game == 1, round == 10) %>% dplyr::select(id1, id2)
+g10 = graph_from_data_frame(game1_round10_edgelist, directed = T, vertices = ndata1_r10)
+
+game1_round11_edgelist = ldata %>% filter(game == 1, round == 11) %>% dplyr::select(id1, id2)
+g11 = graph_from_data_frame(game1_round11_edgelist, directed = T, vertices = ndata1_r11)
+
+game1_round12_edgelist = ldata %>% filter(game == 1, round == 12) %>% dplyr::select(id1, id2)
+g12 = graph_from_data_frame(game1_round12_edgelist, directed = T, vertices = ndata1_r12)
+
+game1_round13_edgelist = ldata %>% filter(game == 1, round == 13) %>% dplyr::select(id1, id2)
+g13 = graph_from_data_frame(game1_round13_edgelist, directed = T, vertices = ndata1_r13)
+
+game1_round14_edgelist = ldata %>% filter(game == 1, round == 14) %>% dplyr::select(id1, id2)
+g14 = graph_from_data_frame(game1_round14_edgelist, directed = T, vertices = ndata1_r14)
+
+game1_round15_edgelist = ldata %>% filter(game == 1, round == 15) %>% dplyr::select(id1, id2)
+g15 = graph_from_data_frame(game1_round15_edgelist, directed = T, vertices = ndata1_r15)
+```
+
+```{r}
+# Creating a game1 animation
+library(animation)
+
+names(ndata1)
+```
+
+```{R}
+saveGIF({
+  plot(g0, 
+     layout = coords, 
+     vertex.size = vertex_attr(g0, "behaviorTime"),
+     vertex.color = pal[as.numeric(factor(vertex_attr(g0, "behavior"), levels = c("D", "C", "P")))])
+  plot(g1, 
+     layout = coords, 
+     vertex.size = vertex_attr(g1, "behaviorTime"),
+     vertex.color = pal[as.numeric(factor(vertex_attr(g1, "behavior"), levels = c("D", "C", "P")))])
+  plot(g2, 
+     layout = coords, 
+     vertex.size = vertex_attr(g2, "behaviorTime"),
+     vertex.color = pal[as.numeric(factor(vertex_attr(g2, "behavior"), levels = c("D", "C", "P")))])
+  plot(g3, 
+     layout = coords, 
+     vertex.size = vertex_attr(g3, "behaviorTime"),
+     vertex.color = pal[as.numeric(factor(vertex_attr(g3, "behavior"), levels = c("D", "C", "P")))])
+  plot(g4, 
+     layout = coords, 
+     vertex.size = vertex_attr(g4, "behaviorTime"),
+     vertex.color = pal[as.numeric(factor(vertex_attr(g4, "behavior"), levels = c("D", "C", "P")))])
+  plot(g5, 
+     layout = coords,  
+     vertex.size = vertex_attr(g5, "behaviorTime"),
+     vertex.color = pal[as.numeric(factor(vertex_attr(g5, "behavior"), levels = c("D", "C", "P")))])
+  plot(g6, 
+     layout = coords,  
+     vertex.size = vertex_attr(g6, "behaviorTime"),
+     vertex.color = pal[as.numeric(factor(vertex_attr(g6, "behavior"), levels = c("D", "C", "P")))])
+  plot(g7, 
+     layout = coords,  
+     vertex.size = vertex_attr(g7, "behaviorTime"),
+     vertex.color = pal[as.numeric(factor(vertex_attr(g7, "behavior"), levels = c("D", "C", "P")))])
+  plot(g8, 
+     layout = coords,  
+     vertex.size = vertex_attr(g8, "behaviorTime"),
+     vertex.color = pal[as.numeric(factor(vertex_attr(g8, "behavior"), levels = c("D", "C", "P")))]) 
+  plot(g9, 
+     layout = coords,  
+     vertex.size = vertex_attr(g9, "behaviorTime"),
+     vertex.color = pal[as.numeric(factor(vertex_attr(g9, "behavior"), levels = c("D", "C", "P")))])
+  plot(g10, 
+     layout = coords,  
+     vertex.size = vertex_attr(g10, "behaviorTime"),
+     vertex.color = pal[as.numeric(factor(vertex_attr(g10, "behavior"), levels = c("D", "C", "P")))])
+  plot(g11, 
+     layout = coords,  
+     vertex.size = vertex_attr(g11, "behaviorTime"),
+     vertex.color = pal[as.numeric(factor(vertex_attr(g11, "behavior"), levels = c("D", "C", "P")))])
+  plot(g12, 
+     layout = coords,  
+     vertex.size = vertex_attr(g12, "behaviorTime"),
+     vertex.color = pal[as.numeric(factor(vertex_attr(g12, "behavior"), levels = c("D", "C", "P")))])
+  plot(g13, 
+     layout = coords,  
+     vertex.size = vertex_attr(g13, "behaviorTime"),
+     vertex.color = pal[as.numeric(factor(vertex_attr(g13, "behavior"), levels = c("D", "C", "P")))])
+  plot(g14, 
+     layout = coords,  
+     vertex.size = vertex_attr(g14, "behaviorTime"),
+     vertex.color = pal[as.numeric(factor(vertex_attr(g14, "behavior"), levels = c("D", "C", "P")))])
+  plot(g15, 
+     layout = coords,  
+     vertex.size = vertex_attr(g15, "behaviorTime"),
+     vertex.color = pal[as.numeric(factor(vertex_attr(g15, "behavior"), levels = c("D", "C", "P")))])
+  },
+  interval = 0.65, movie.name = "game1.gif")
+```
 
 ```{r}
 load("~/Documents/Projects/harming_esn/Data/nodedataHarming.rdata") 
