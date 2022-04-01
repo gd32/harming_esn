@@ -102,7 +102,7 @@ ldata6 = reshape(ldata5, direction = "wide", idvar=c("round","gameID","game","sc
 rownames(ldata6) = NULL
 
 #n of ties to calculate network density (degree)
-ldata6$n_ties = as.numeric(apply(ldata6[,c("id2.1","id2.2","id2.3","id2.4","id2.5","id2.6","id2.7","id2.8","id2.9","id2.10","id2.11","id2.12","id2.13","id2.14")],1,length1))
+ldata6$n_ties = as.numeric(apply(ldata6[,c("id2.1","id2.2","id2.3","id2.4","id2.5","id2.6","id2.7","id2.8","id2.9","id2.10","id2.11","id2.12","id2.13","id2.14", "id2.15", "id2.16", "id2.17")],1,length1))
 
 ndata1 = merge(x=ndata,y=ldata6,all.x=TRUE,all.y=FALSE,
                by.x=c("round","gameID","game","scoreA","scoreB","percentA","showScore","id"),

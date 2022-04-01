@@ -116,6 +116,11 @@ ldata = data3_combined #link data
 save(ndata,file="node_1aX.Rdata") 
 save(ldata,file="link_1aX.Rdata") 
 
+ndata %>% filter(game == 44, round == 0) %>% pull(id)
+ndata %>% filter(game == 44, round == 1) %>% pull(id)
+ndata %>% filter(game == 44, round == 2) %>% pull(id)
+ndata %>% filter(game == 44, round == 8) %>% pull(id)
+ndata %>% filter(game == 44, round == 15) %>% pull(id)
 
 
 #estbalish happ_coop
