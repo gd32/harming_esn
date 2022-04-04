@@ -24,7 +24,7 @@ library(reldist)
 library(tidyverse)
 library(Zelig)
 library(lme4)
-library(ggplot2)#causal mediation analysis
+library(ggplot2)
 library(lmerTest)
 library(igraph) 
 ```
@@ -59,7 +59,8 @@ harmdata = mdata3
 # Renaming current rates
 harmdata = harmdata %>% rename(local_rate_coop = cur_local_rate_coop, 
                     local_rate_defect = cur_local_rate_defect,
-                    local_rate_punish = cur_local_rate_punish)
+                    local_rate_punish = cur_local_rate_punish,
+                    initial_defect = inital_defect)
 
 # Create continuous happiness variable
 harmdata$happ = ifelse(harmdata$satisfaction == "v_good", 2, 
@@ -94,39 +95,31 @@ harmdata$age = as.numeric(unlist(harmdata$age))
 harmdata$gender = as.character(unlist(harmdata$gender))
 harmdata$ipAddress = as.character(unlist(harmdata$ipAddress))
 
+# Convert IPaddress to country
+library(rgeolocate)
+file = system.file("extdata","GeoLite2-Country.mmdb", package = "rgeolocate")
+ipCountries = maxmind(harmdata$ipAddress, file, "country_name")
+harmdata$country = ipCountries$country_name
+
+`%notin%` <- Negate(`%in%`)
+
+harmdata = harmdata %>% 
+  mutate(country_3cat = factor(case_when(country == "United States" ~ "US",
+                                         country == "India" ~ "India",
+                                         country %notin% c("United States", "India") ~ "Other"),
+                               levels = c("US", "India", "Other")))
+              
 # Making data0 - base dataset for regression
-data0 = harmdata %>% dplyr::select(game, superid, round, age, gender, ipAddress,
-                                   showScore, initial_score, payoff, 
-                                   cumulativePayoff, cPayoffS, 
+data0 = harmdata %>% dplyr::select(game, superid, round, age, gender, 
+                                   country_3cat, showScore, initial_score, 
+                                   payoff, cumulativePayoff, cPayoffS, 
                                    WealthLevel, behavior_coop, behavior_defect, 
                                    behavior_punish, local_rate_coop, 
                                    local_rate_defect, local_rate_punish, happ, 
-                                   behaviorTime, degree)
+                                   behaviorTime, degree, initial_coop,
+                                   initial_defect, initial_punish)
 
 ```
-
-## Making the conflict variables
-
-Conflict defined as:
-
-Harming, dichotomized to costly punishment + non-punishing harming (everything else = non-justifiable harming?)
-
-Criteria for costly punishment: cooperation at a prior round x the local cooperation rate at a prior round of <50% [note: downtrend but not 50% yet <- too early to justify? = preventive costly punishment?]
-
-Costly punishment is like a last-resort shock to wake the defecting others as a majority up and changes their behavior to cooperation (the defection rate needs to be >50% per rule). 
-
-Peace = no harming in the round (very common?)
-
-Evolution of peace = no harming over the recent and current 5 rounds? (common as well?)
-
-[We can check later if the result with harming is the same as that with costly punishment only and that with non-justifiable harming only]
-
-```{r}
-harmdata %>% group_by(game) %>% select(game, round, cPayoffS, behaviorTime, gender, age, degree, prev_local_rate_coop, local_rate_coop, prev_local_rate_punish, local_rate_punish)
-
-```
-
-
 
 ```{r}
 #Making lag data
@@ -140,9 +133,78 @@ data1 = merge(x=data0,y=data_lag,all.x=T,all.y=F,by=c("superid","round"))
 
 data1$log_behaviorTime = log10(data1$behaviorTime)
 data1$log_behaviorTime_lag = log10(data1$behaviorTime_lag)
-
-table(data1$behavior_coop) #5849/4878
 ```
+
+## Making the conflict variables
+
+Conflict defined as:
+
+Harming, dichotomized to costly punishment + non-punishing harming (everything else = non-justifiable harming?)
+
+Criteria for costly punishment: cooperation at a prior round x the local cooperation rate at a prior round of <50% [note: downtrend but not 50% yet <- too early to justify? = preventive costly punishment?]
+
+want to identify decision shifts + characterize them based on rate of cooperation. 
+- Costly punishment: from c -> p based on local_rate_coop <50%
+    - can be a gradient for this (i.e. 75->51%, etc.)
+
+Costly punishment is like a last-resort shock to wake the defecting others as a majority up and changes their behavior to cooperation (the defection rate needs to be >50% per rule). 
+
+Peace = no harming in the round (very common?)
+
+Evolution of peace = no harming over the recent and current 5 rounds? (common as well?)
+
+[We can check later if the result with harming is the same as that with costly punishment only and that with non-justifiable harming only]
+
+```{r}
+names(data1)
+
+# Looking at behavior change from coop -> not coop
+coop_to_not_coop = data1 %>% 
+  group_by(game, superid) %>% 
+  select(superid, game, round, behavior_coop, behavior_defect, behavior_punish, 
+         behavior_coop_lag, behavior_defect_lag, behavior_punish_lag,
+         local_rate_coop, local_rate_defect, local_rate_punish,
+         local_rate_coop_lag, local_rate_defect_lag, local_rate_punish_lag,
+         initial_coop, initial_defect, initial_punish, log_behaviorTime_lag) %>%
+  filter(round != 0, behavior_coop != 1, behavior_coop_lag == 1) 
+
+names(coop_to_not_coop)
+
+# C -> P
+grouped_means = coop_to_not_coop %>% 
+  filter(behavior_punish == 1) %>% 
+  summarize(mean_prev_coop_rate = mean(local_rate_coop_lag),
+            mean_prev_def_rate = mean(local_rate_defect_lag),
+            mean_prev_punish_rate = mean(local_rate_punish_lag),
+            mean_prev_behavior_time = mean(log_behaviorTime_lag))
+
+grouped_means %>% filter(mean_prev_punish_rate == 1)
+
+grouped_means %>% 
+  filter(mean_prev_punish_rate != 0, mean_prev_punish_rate != 1) %>%
+  ggplot() +
+  geom_point(aes(x=mean_prev_punish_rate, 
+                 y = mean_prev_behavior_time, 
+                 color = factor(superid))) +
+  geom_smooth(aes(x=mean_prev_punish_rate,
+                  y=mean_prev_behavior_time),
+              method = "loess", formula = y ~ x)
+
+# View instances of costly punishment
+coop_to_not_coop %>% 
+  filter(behavior_punish == 1, local_rate_coop_lag < 0.5) %>% 
+  select(superid, game, round, local_rate_coop_lag, local_rate_punish_lag,
+         local_rate_coop, local_rate_punish) %>% 
+  ggplot() + 
+  geom_point(aes(x=local_rate_punish_lag, local_rate_punish, 
+                 color = factor(superid))) 
+
+
+
+
+
+```
+
 
 ## Analysis
 
