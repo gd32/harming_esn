@@ -9,12 +9,6 @@ output: html_notebook
 knitr::opts_chunk$set(echo = T, message = F, warning = F, fig.align = "center", fig.height = 3, fig.width = 5, tidy.opts=list(width.cutoff=80), tidy=TRUE)
 ```
 
-## Three potential messages
-
-- The aggressor in the war is not the attacker in the cascade: but a defector: fundamental cause (needs to be tested).
-- It is not the first attack but the retaliation that (second one) determines the evolution of the "war" state in the experimental social networks (needs to be tested). If attackers are ignored,  attackers may realize the cost of the attack.
-- Selection favors "ignorers" or "mercy cooperators" (attackers or non-attackers) (needs to be tested)
-
 # Data Management + Cleaning
 
 ## Load packages
@@ -110,18 +104,17 @@ harmdata = harmdata %>%
                                levels = c("US", "India", "Other")))
               
 # Making data0 - base dataset for regression
+names(harmdata)
+
 data0 = harmdata %>% dplyr::select(game, superid, round, age, gender, 
                                    country_3cat, showScore, initial_score, 
                                    payoff, cumulativePayoff, cPayoffS, 
                                    WealthLevel, behavior_coop, behavior_defect, 
                                    behavior_punish, local_rate_coop, 
                                    local_rate_defect, local_rate_punish, happ, 
-                                   behaviorTime, degree, initial_coop,
+                                   behaviorTime, degree, e_degree, initial_coop,
                                    initial_defect, initial_punish)
 
-```
-
-```{r}
 #Making lag data
 data_lag = data0 %>% dplyr::select(superid, round, initial_score, payoff, cumulativePayoff, cPayoffS, WealthLevel, behavior_coop, local_rate_coop, behavior_defect, local_rate_defect, behavior_punish, local_rate_punish, degree, happ, behaviorTime)
 
@@ -139,7 +132,7 @@ data1$log_behaviorTime_lag = log10(data1$behaviorTime_lag)
 
 Conflict defined as:
 
-Harming, dichotomized to costly punishment + non-punishing harming (everything else = non-justifiable harming?)
+Harming, dichotomous to costly punishment + non-punishing harming (everything else = non-justifiable harming?)
 
 Criteria for costly punishment: cooperation at a prior round x the local cooperation rate at a prior round of <50% [note: downtrend but not 50% yet <- too early to justify? = preventive costly punishment?]
 
@@ -168,19 +161,77 @@ coop_to_not_coop = data1 %>%
          initial_coop, initial_defect, initial_punish, log_behaviorTime_lag) %>%
   filter(round != 0, behavior_coop != 1, behavior_coop_lag == 1) 
 
-names(coop_to_not_coop)
+# Confirm that repetition and change differ in time
+data2 = data1 %>% 
+  group_by(game, superid) %>% 
+  select(superid, game, round, behavior_coop, behavior_defect, behavior_punish, 
+         behavior_coop_lag, behavior_defect_lag, behavior_punish_lag,
+         local_rate_coop, local_rate_defect, local_rate_punish,
+         local_rate_coop_lag, local_rate_defect_lag, local_rate_punish_lag,
+         initial_coop, initial_defect, initial_punish, log_behaviorTime_lag) %>%
+  mutate(behavior = case_when(behavior_coop == 1 ~ "C",
+                              behavior_defect == 1 ~ "D",
+                              behavior_punish == 1 ~ "P"),
+         behavior_lag = case_when(behavior_coop_lag == 1 ~ "C",
+                                  behavior_defect_lag == 1 ~ "D",
+                                  behavior_punish_lag == 1 ~ "P"),
+         repetition = ifelse(behavior == behavior_lag, 1, 0))
 
+# Yes, the mean time for repeated behavior is shorter
+data2 %>% 
+  na.omit() %>%
+  ggplot() + 
+  geom_boxplot(aes(x=factor(repetition, levels = c(1, 0)), 
+                   y = log_behaviorTime_lag))
+rep_times = data2 %>% na.omit() %>% 
+  filter(repetition == 1) %>% pull(log_behaviorTime_lag)
+diff_times = data2 %>% na.omit() %>% 
+  filter(repetition == 0) %>% pull(log_behaviorTime_lag)
+t.test(rep_times, diff_times) # confirmed
+```
+
+```{r}
+# Is it different for C-C, D-D, P-P?
+data2 %>% 
+  mutate(rep_cats = case_when(behavior == "C" & behavior_lag == "C" ~ "C-C",
+                              behavior == "D" & behavior_lag == "D" ~ "D-D",
+                              behavior == "P" & behavior_lag == "P" ~ "P-P")) %>% 
+  na.omit() %>% 
+  ggplot() + 
+  geom_boxplot(aes(x = factor(rep_cats, levels = c("C-C", "D-D", "P-P")), 
+                   y = log_behaviorTime_lag))
+# the median punish time is a bit longer, but not by much - confirms repetition
+# is the fastest/easiest regardless of type
+```
+```{r}
+# Are there differences for the different combinations? CD CP DC DP PC PD
+data2 = data2 %>% mutate(diff_cats = case_when(behavior == "C" & behavior_lag == "D" ~ "CD",
+                                       behavior == "C" & behavior_lag == "P" ~ "CP",
+                                       behavior == "D" & behavior_lag == "C" ~ "DC",
+                                       behavior == "D" & behavior_lag == "P" ~ "DP",
+                                       behavior == "P" & behavior_lag == "C" ~ "PC",
+                                       behavior == "P" & behavior_lag == "D" ~ "PD"))
+
+data2 %>% 
+  na.omit() %>%
+  ggplot() +
+  geom_boxplot(aes(x=factor(diff_cats), y = log_behaviorTime_lag)) 
+# Going back to cooperation is faster
+```
+
+```{r}  
 # C -> P
-grouped_means = coop_to_not_coop %>% 
+grouped_means_c_to_p = coop_to_not_coop %>% 
   filter(behavior_punish == 1) %>% 
   summarize(mean_prev_coop_rate = mean(local_rate_coop_lag),
             mean_prev_def_rate = mean(local_rate_defect_lag),
             mean_prev_punish_rate = mean(local_rate_punish_lag),
             mean_prev_behavior_time = mean(log_behaviorTime_lag))
 
-grouped_means %>% filter(mean_prev_punish_rate == 1)
+grouped_means_c_to_p %>% filter(mean_prev_punish_rate == 1)
 
-grouped_means %>% 
+# Group means
+grouped_means_c_to_p %>% 
   filter(mean_prev_punish_rate != 0, mean_prev_punish_rate != 1) %>%
   ggplot() +
   geom_point(aes(x=mean_prev_punish_rate, 
@@ -191,6 +242,7 @@ grouped_means %>%
               method = "loess", formula = y ~ x)
 
 # View instances of costly punishment
+
 coop_to_not_coop %>% 
   filter(behavior_punish == 1, local_rate_coop_lag < 0.5) %>% 
   select(superid, game, round, local_rate_coop_lag, local_rate_punish_lag,
@@ -199,18 +251,73 @@ coop_to_not_coop %>%
   geom_point(aes(x=local_rate_punish_lag, local_rate_punish, 
                  color = factor(superid))) 
 
+# Filter by potential for costly punishment
+coop_to_not_coop %>% ungroup() %>%
+  filter(local_rate_coop_lag < 0.5) %>%
+  summarize(n_defects = sum(behavior_defect),
+            n_punish= sum(behavior_punish))
+# 297 defects, 104 punishes
 
+c1 = coop_to_not_coop %>% 
+  filter(local_rate_coop_lag < 0.5) %>%
+  mutate(behavior = case_when(behavior_defect == 1 ~ "D",
+                              behavior_punish == 1 ~ "P")) %>%
+  select(superid, game, round, behavior, local_rate_coop_lag, local_rate_defect_lag,
+         local_rate_punish_lag, initial_coop, initial_defect, initial_punish,
+         log_behaviorTime_lag) # 4 missing - ignore
 
+c1_clean = na.omit(c1)
 
+c1_clean %>%
+  ggplot() + geom_boxplot(aes(x = behavior, y = log_behaviorTime_lag))
 
+# Can we distinguish between costly and non-costly punishment?
+coop_to_not_coop %>% 
+  filter(behavior_punish == 1) %>% 
+  ggplot() + 
+  geom_point(aes(x=local_rate_coop_lag, y=log_behaviorTime_lag)) +
+  geom_smooth(aes(x=local_rate_coop_lag, y=log_behaviorTime_lag),
+              method = "loess", formula = y ~ x)
+
+coop_to_not_coop %>% 
+  filter(behavior_punish == 1) %>%
+  ggplot()+
+  geom_histogram(aes(x=local_rate_coop_lag), bins = 10) +
+  scale_x_continuous(breaks = c(seq(0, 1, by = 0.1))) # Maybe 3cat - 0-0.25, 0.25-0.5, 0.5+
+  # or just 2cat - 0-0.5, 0.5+
+
+coop_to_not_coop = coop_to_not_coop %>%
+  mutate(behavior = case_when(behavior_defect == 1 ~ "D",
+                              behavior_punish == 1 ~ "P"),
+         noncoop_env = ifelse(local_rate_coop_lag < 0.5, 1, 0),
+         noncoop_env_3cat = case_when(local_rate_coop_lag >= 0.5 ~ 0,
+                                      local_rate_coop_lag >= 0.25 & local_rate_coop_lag < 0.5 ~ 1,
+                                      local_rate_coop_lag >= 0 & local_rate_coop_lag <0.25 ~ 2))
+  
+xtabs(~noncoop_env + behavior, data = coop_to_not_coop)
+xtabs(~noncoop_env_3cat + behavior, data = coop_to_not_coop)
+xtabs(~behavior, data=coop_to_not_coop)
+
+coop_to_p = coop_to_not_coop %>% 
+  filter(behavior == "P")
+
+xtabs(~behavior + noncoop_env_3cat, data = coop_to_p)
+
+coop_to_p %>% na.omit() %>%
+  ggplot() +
+  geom_boxplot(aes(x=factor(noncoop_env, levels = c(0, 1)), y=log_behaviorTime_lag)) +
+  scale_x_discrete(labels = c("Cooperative Environment", "Non-cooperative Environment"))
+
+coop_times = coop_to_p %>% filter(noncoop_env == 0) %>% pull(log_behaviorTime_lag)
+non_coop_times = coop_to_p %>% filter(noncoop_env == 1) %>% pull(log_behaviorTime_lag)
+t.test(coop_times, non_coop_times, var.equal = F) # no different in time based on environment
 ```
 
+## Answering questions about the games
 
 ## Analysis
 
-### Research Question 1
-
-What are the characteristics of people who chose to attack (=performing costly sanction)? (social demographic emotional) (who include attack in their behavior strategy?) We can evaluate this question using two approaches: 
+### 1. What are the characteristics of people who chose to attack (=performing costly sanction)? (social demographic emotional) (who include attack in their behavior strategy?) We can evaluate this question using two approaches: 
 
 #### a) Using the binary attack indicator (so factors influencing specific individual choices) 
     
@@ -263,7 +370,7 @@ tab_m3cat = cbind(Est = fixef(m3_cat), LL = fixef(m3_cat) - 1.96 * se, UL = fixe
 round(exp(tab_m3cat), digits = 3)[1:12,]
 ```
  
-#### Add more categories to category 2?
+#### 1b) Add more categories to category 2?
     
 Try 4 categories (0-24%, 25-49%, 50-74%, 75-100%) for cooperation to test for dose response.
     
@@ -298,7 +405,7 @@ tab_m3.1cat = cbind(Est = fixef(m3.1_cat), LL = fixef(m3.1_cat) - 1.96 * se, UL 
 round(exp(tab_m3.1cat), digits = 3)[1:13,] 
 ```
 
-#### 1b) Evaluating characteristics of ever attackers
+#### 1c) Evaluating characteristics of ever attackers
     
 ```{r}
 ever_attackers = unique(harmdata %>% group_by(superid) %>% filter(behavior_punish == 1) %>% pull(superid))
@@ -408,7 +515,7 @@ data0_sum %>% filter(game %in% 26:50) %>% ggplot() +
   theme(legend.position = c("none"))
 ```
 
-2. Does longer thinking time stop attacks?
+### 2. Does longer thinking time stop attacks?
 
 Seems like more deliberation -> higher chance of attack. Less change in terms of rate of cooperation
 
@@ -447,7 +554,7 @@ summary(data1[is.na(data1$behaviorTime)==0 & data1$behaviorTime>=9000 & data1$be
 #0.079
 ```
 
-3. What factors stop consecutive attacks?
+### 3. What factors stop consecutive attacks?
 
     a) Identify attack patterns - first, create a new dataset that characterizes behavior by each actor in consecutive rounds.
     
@@ -934,8 +1041,46 @@ saveGIF({
   interval = 0.65, movie.name = "game44.gif")
 ```
 
+## 3. Determining the influence of different harming patterns
 
+Finding 3) When people are harmed by two or more of the connecting neighbors, they are more likely to choose to harm the connecting neighbors; on the other hand, when people are harmed by only one of the connecting neighbors, their rate of harming choice is the same as that when they are harmed by no one. -> It implies that people in modern societies generally take a generous strategy in the present experiment setting, in which they can prevent their revengeful harming from indiscriminately harming all the connecting neighbors including harmers and non-harmers (cooperators or defectors). And, there is a threshold - such a threshold may work as a stopper of the vicious cycle of harming behavior.  OR one-shot really works as a cooperation enhancer? (but two harmers may produce harming trends?)
+[note: yes, a gunshot has a mistake] [note: dose-response for the number of innocent neighbors? only connecting with harmers may make revenge an easy option, "deterrent"??]
 
+```{r}
+data3 = data1 %>% 
+  filter(round != 0) %>%
+  mutate(count_local_coop_lag = e_degree * local_rate_coop_lag,
+         count_local_defect_lag = e_degree * local_rate_defect_lag,
+         count_local_punish_lag = e_degree *  local_rate_punish_lag)
+hist(data3$count_local_coop_lag)
+hist(data3$count_local_defect_lag)
+hist(data3$count_local_punish_lag)
+```
+```{r}
+data3 %>% 
+  filter(count_local_coop_lag == 0) %>%
+  ggplot() + 
+  geom_histogram(aes(x = e_degree), bins = 20)
+
+data3 %>% filter(count_local_punish_lag >= 2)
+
+data3 %>% filter(count_local_punish_lag >= 2) %>% tally(behavior_coop) #78
+data3 %>% filter(count_local_punish_lag >= 2) %>% tally(behavior_defect) #172
+data3 %>% filter(count_local_punish_lag >= 2) %>% tally(behavior_punish) #17
+# Coop rate - 78/267 = 29%, Defect rate = 64%, Punish rate = 6.4%
+17/267
+
+data3 %>% filter(count_local_punish_lag == 1) %>% tally(behavior_coop) #217
+data3 %>% filter(count_local_punish_lag == 1) %>% tally(behavior_defect) #300
+data3 %>% filter(count_local_punish_lag == 1) %>% tally(behavior_punish) #38)
+# Coop rate - 217/555 = 39%, defect rate = 54%, punish rate = 6.8%
+
+data3 %>% filter(count_local_punish_lag == 0) %>% tally(behavior_coop) #3632
+data3 %>% filter(count_local_punish_lag == 0) %>% tally(behavior_defect) #2869
+data3 %>% filter(count_local_punish_lag == 0) %>% tally(behavior_punish) #359
+# C: 3632/6860 = 53%, D: 42%, P: 5.2%
+```
+Next: how to show this in regression model?
 
 ```{r}
 load("~/Documents/Projects/harming_esn/Data/nodedataHarming.rdata") 

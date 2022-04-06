@@ -62,8 +62,8 @@ for (i in 1:(dim(ldata4)[1]-1)) {
   print(i)
 }
 save(ldata4,file="ldata4_0316X.Rdata")
-load("ldata4_0316X.Rdata") #ldata
-load(file="node_1aX.Rdata") #ndata
+load("~/Documents/Projects/harming_esn/Data/harming_jsons/ldata4_0316X.Rdata") #ldata
+load("~/Documents/Projects/harming_esn/Data/harming_jsons/node_1aX.Rdata") #ndata
 
 ### adjust ndata ####
 
@@ -85,7 +85,7 @@ xtabs(~behavior+behavior_punish, ndata)
 ndata$behaviorTime = as.numeric(ndata$behaviorTime)
 
 # What scale is satisfaction on ?
-unlist(ndata$satisfaction)
+table(unlist(ndata$satisfaction)) # just a likert scale? 1 - very bad -> 5 very good
 
 # Other demographics? can get is_hispanic, race, ipAddress
 table(unlist(ndata$is_hispanic)) # All missing - or could be no hispanic? Regardless, don't use
@@ -110,7 +110,6 @@ ndata1 = merge(x=ndata,y=ldata6,all.x=TRUE,all.y=FALSE,
 
 save(ndata1,file="~/Documents/Projects/harming_esn/Data/ndata_individual.Rdata") #This is used for the individual-level analysis. 
 load("~/Documents/Projects/harming_esn/Data/ndata_individual.Rdata") #ndata1 
-
 
 dim(ndata1[ndata1$round==0,]) # 745 individuals
 dim(ndata1) # 10727 individual rounds
@@ -240,7 +239,8 @@ outcome_network = merge(outcome_data, network_data, all.x = T, by = c("gameID", 
 dim(outcome_data) #19 vars
 dim(network_data) #29 vars
 length(unique(outcome_network$superid))
-#After merge should be 19 + 25 = 43 vars
+dim(outcome_network)
+#After merge should be 19 + 25 = 44 vars
 
 outcome_network_a1 = merge(x=outcome_network,y=a1_data,all.x=TRUE,all.y=FALSE,by.x=c("gameID","game","previousround","superid2.1"),by.y=c("gameID","game","previousround","a1_superid"))
 outcome_network_a2 = merge(x=outcome_network_a1,y=a2_data,all.x=TRUE,all.y=FALSE,by.x=c("gameID","game","previousround","superid2.2"),by.y=c("gameID","game","previousround","a2_superid"))
@@ -266,6 +266,7 @@ outcome_network_a14 = merge(x=outcome_network_a13,y=a14_data,all.x=TRUE,all.y=FA
 
 mdata1 = outcome_network_a14
 mdata1 = as.matrix(mdata1)
+dim(mdata1)
 write.csv(mdata1, "mdata1_0316X.csv", quote=FALSE, row.names=FALSE) 
 
 outcome_network_c1 = merge(x=outcome_network_a14,y=c1_data,all.x=TRUE,all.y=FALSE,by.x=c("gameID","game","round","superid2.1"),by.y=c("gameID","game","currentround","c1_superid"))
@@ -294,7 +295,6 @@ mdata1$rate_coop[is.nan(mdata1$rate_coop)] = NA
 #rate of defection
 mdata1$rate_defect = as.numeric(apply(mdata1[,c("a1_behavior_defect","a2_behavior_defect","a3_behavior_defect","a4_behavior_defect","a5_behavior_defect","a6_behavior_defect","a7_behavior_defect","a8_behavior_defect","a9_behavior_defect","a10_behavior_defect","a11_behavior_defect","a12_behavior_defect","a13_behavior_defect","a14_behavior_defect")],1,mean1))
 mdata1$rate_defect[is.nan(mdata1$rate_defect)] = NA
-hist(mdata1$rate_defect)
 
 #rate of attack/punish
 mdata1$rate_punish = as.numeric(apply(mdata1[,c("a1_behavior_punish","a2_behavior_punish","a3_behavior_punish","a4_behavior_punish","a5_behavior_punish","a6_behavior_punish","a7_behavior_punish","a8_behavior_punish","a9_behavior_punish","a10_behavior_punish","a11_behavior_punish","a12_behavior_punish","a13_behavior_punish","a14_behavior_punish")],1,mean1))
@@ -345,6 +345,9 @@ mdata1$prev_local_rate_punish = as.numeric(apply(mdata1[,c("a1_behavior_punish",
 mdata1$cur_local_rate_punish = as.numeric(apply(mdata1[,c("c1_behavior_punish","c2_behavior_punish","c3_behavior_punish","c4_behavior_punish","c5_behavior_punish"
                                                         ,"c6_behavior_punish","c7_behavior_punish","c8_behavior_punish","c9_behavior_punish","c10_behavior_punish",
                                                         "c11_behavior_punish","c12_behavior_punish","c13_behavior_punish","c14_behavior_punish")],1,mean1))
+
+# Counts for choices in the local network
+mdata1$prev_count_coop = 
 
 #Checking the data
 hist(mdata1$prev_local_rate_coop)
