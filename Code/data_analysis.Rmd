@@ -5,7 +5,7 @@ author: "George Dewey, Akihiro Nishi"
 output: html_notebook
 ---
 
-```{r setup, include=FALSE}
+```{r setup, include="FALSE"}
 knitr::opts_chunk$set(echo = T, message = F, warning = F, fig.align = "center", fig.height = 3, fig.width = 5, tidy.opts=list(width.cutoff=80), tidy=TRUE)
 ```
 
@@ -315,6 +315,12 @@ t.test(coop_times, non_coop_times, var.equal = F) # no different in time based o
 
 ## Answering questions about the games
 
+How many times does peace occur (i.e. in one round, no harming is chosen)?
+
+```{r}
+
+```
+
 ## Analysis
 
 ### 1. What are the characteristics of people who chose to attack (=performing costly sanction)? (social demographic emotional) (who include attack in their behavior strategy?) We can evaluate this question using two approaches: 
@@ -322,13 +328,19 @@ t.test(coop_times, non_coop_times, var.equal = F) # no different in time based o
 #### a) Using the binary attack indicator (so factors influencing specific individual choices) 
     
 ```{r}
-data1_cc = na.omit(data1)
+names(data1)
+# Make the categorical behavior variable
+data1b = data1 %>% mutate(behavior = case_when(behavior_coop == 1 ~ "C",
+                                      behavior_defect == 1 ~ "D",
+                                      behavior_punish == 1 ~ "P"),
+                 behavior_lag = case_when(behavior_coop_lag == 1 ~ "C",
+                                          behavior_defect_lag ==1 ~ "D",
+                                          behavior_punish_lag == 1 ~ "P"))
+data1_cc = na.omit(data1b)
 dim(data1_cc)
 ```
 
-```{R}
-table(as.character(unlist(ndata1$attentive)))
-```
+## Binary outcomes
 
 ```{r}
 m1 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + log_behaviorTime + log_behaviorTime_lag + factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
@@ -354,7 +366,6 @@ se = sqrt(diag(vcov(m3)))
 tab_m3 = cbind(Est = fixef(m3), LL = fixef(m3) - 1.96 * se, UL = fixef(m3) + 1.96 * se)
 round(exp(tab_m3), digits = 3)[1:11,]
 ```
-
 #### Trying model 3 with categorical rate
 
 ```{r}
@@ -513,6 +524,49 @@ data0_sum %>% filter(game %in% 26:50) %>% ggplot() +
   xlab("Round")+
   ylab("Mean Local Punish Rate") +
   theme(legend.position = c("none"))
+```
+
+
+#### 1d) Multinomial outcomes
+
+First, compare P vs. C+D (should be the same as the binary ones)
+
+```{r}
+data1_cc_1d = data1_cc %>% mutate(behavior_punish_binary = ifelse(behavior == "P", 1, 0))
+
+m1_1d = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + log_behaviorTime + log_behaviorTime_lag + factor(round) + (1|game) + (1|superid), data = data1_cc_1d, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+se = sqrt(diag(vcov(m1_1d)))
+# table of estimates with 95% CI
+tab_m1_1d = cbind(Est = fixef(m1_1d), LL = fixef(m1_1d) - 1.96 * se, UL = fixef(m1_1d) + 1.96 * se)
+round(exp(tab_m1_1d), digits = 3)[1:13,] # confirmed to be same
+```
+Now use multinomial behavior as the outcome (without and with time)
+
+```{r}
+library(mgcv)
+
+
+data1_cc_1d = data1_cc_1d %>% mutate(behavior = factor(behavior, levels = c("C", "D", "P")),
+                                     behavior_numeric = case_when(behavior == "C" ~ 0,
+                                                                  behavior == "D" ~ 1,
+                                                                  behavior == "P" ~ 2))
+
+# Multinomial with random effects
+terms_list = list(behavior_numeric ~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"), ~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"),  ~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"), ~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"), ~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"), ~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"), ~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"), ~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"),~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"),~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"),~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"),~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re")) 
+
+m2_1d = gam(terms_list, data = data1_cc_1d, family = multinom(K = 12))
+
+
+# Without time
+m2_1d = gam(models, data = data1_cc_1d, family = multinom(K = 2))
+
+m2_1d = glmer(behavior ~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"), data = data1_cc_1d, family = multinom(K = 3))
+
+se = sqrt(diag(vcov(m2_1d)))
+# table of estimates with 95% CI
+tab_m2_1d = cbind(Est = fixef(m2_1d), LL = fixef(m2_1d) - 1.96 * se, UL = fixef(m2_1d) + 1.96 * se)
+round(exp(tab_m2_1d), digits = 3)[1:11,] # confirmed to be same
 ```
 
 ### 2. Does longer thinking time stop attacks?
