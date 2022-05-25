@@ -2,36 +2,45 @@
 title: "Evolution of Peace in Experimental Social Networks"
 subtitle: "Data Analysis"
 author: "George Dewey, Akihiro Nishi"
-output: html_notebook
+output: html_document
 ---
 
 ```{r setup, include="FALSE"}
-knitr::opts_chunk$set(echo = T, message = F, warning = F, fig.align = "center", fig.height = 3, fig.width = 5, tidy.opts=list(width.cutoff=80), tidy=TRUE)
+knitr::opts_chunk$set(echo = T, message = F, warning = F, fig.align = "center", tidy.opts=list(width.cutoff=80), tidy=TRUE)
 ```
+
+This R Markdown document contains the data cleaning and analysis for our paper, "Evolution of Peace in Experimental Social Networks".
+
+# Glossary
+
+The following terms are defined in the main manuscript but are listed here for your convenience.
+
+- *Punishment* :Justifiable harming*?  call this punishment? Costly Punishment: punishment in which harming is chosen to enhance others to change to cooperation use the local_rate_coop_lag < 0.5 and choosing punishment vs. *unjustified harming*
+- Aggression
+- Harming
+- Peace: round with no choice of "P" among all players
+- Extended? to more than 2+ rounds of peace
+- Cascade: can be for any behavior
 
 # Data Management + Cleaning
 
 ## Load packages
 
-```{r}
-library(reldist)
-library(tidyverse)
-library(Zelig)
-library(lme4)
-library(ggplot2)
+```{r, message = F, warning = F}
+library(tidyverse) # for data management
+library(lme4) # for mixed model regression
+library(reldist) # to calculate gini
 library(lmerTest)
-library(igraph) 
+library(rgeolocate)
+library(igraph) # for network analysis
+library(reshape2)
 ```
 
-## Data Cleaning
-
-Process the data in the same manner as Akihiro's initial analysis. 
+## Data Processing
 
 ```{r}
 # Main data: mdata3
 load("~/Documents/Projects/harming_esn/Data/mdata3.Rdata")
-dim(mdata3) #10727 47
-length(unique(mdata3$superid)) #745
 ```
 
 ### Set up convenience functions
@@ -44,7 +53,7 @@ standardize = function(x) {
 }
 ```
 
-### Data management
+## Data management
 
 ```{r}
 #Checking id
@@ -78,9 +87,6 @@ harmdata = harmdata %>%
 # Create wealth visibility
 harmdata$showScore = ifelse(harmdata$showScore=="true",1,0)
 
-###Renaming game ID as well (1XX for Happ, 2XX for Harm)
-# harmdata$game = 200 + harmdata$game
-
 ###making the variable names the same over the two data
 harmdata = harmdata[,!(names(harmdata) == "gameNumber")]
 
@@ -102,10 +108,10 @@ harmdata = harmdata %>%
                                          country == "India" ~ "India",
                                          country %notin% c("United States", "India") ~ "Other"),
                                levels = c("US", "India", "Other")))
+
+save(harmdata, file = "~/Documents/Projects/harming_esn/Data/harmdata.RData")
               
 # Making data0 - base dataset for regression
-names(harmdata)
-
 data0 = harmdata %>% dplyr::select(game, superid, round, age, gender, 
                                    country_3cat, showScore, initial_score, 
                                    payoff, cumulativePayoff, cPayoffS, 
@@ -116,37 +122,1006 @@ data0 = harmdata %>% dplyr::select(game, superid, round, age, gender,
                                    initial_defect, initial_punish)
 
 #Making lag data
-data_lag = data0 %>% dplyr::select(superid, round, initial_score, payoff, cumulativePayoff, cPayoffS, WealthLevel, behavior_coop, local_rate_coop, behavior_defect, local_rate_defect, behavior_punish, local_rate_punish, degree, happ, behaviorTime)
+data_lag = data0 %>% dplyr::select(superid, round, initial_score, payoff, 
+                                   cumulativePayoff, cPayoffS, WealthLevel, 
+                                   behavior_coop, local_rate_coop, 
+                                   behavior_defect, local_rate_defect, 
+                                   behavior_punish, local_rate_punish, 
+                                   degree, happ, behaviorTime)
 
 names(data_lag)[-c(1,2)] = paste0(names(data_lag)[-c(1,2)],"_lag")
 data_lag$round = data_lag$round + 1
 
-#merge
-data1 = merge(x=data0,y=data_lag,all.x=T,all.y=F,by=c("superid","round"))
+data_lag2 = data0 %>%  dplyr::select(superid, round, initial_score, payoff, 
+                                   cumulativePayoff, cPayoffS, WealthLevel, 
+                                   behavior_coop, local_rate_coop, 
+                                   behavior_defect, local_rate_defect, 
+                                   behavior_punish, local_rate_punish, 
+                                   degree, happ, behaviorTime)
+names(data_lag2)[-c(1,2)] = paste0(names(data_lag2)[-c(1,2)],"_lag2")
+data_lag2$round = data_lag2$round + 2
 
+# Merging
+# Combine the lag data
+data_lag_long = merge(x = data_lag, y = data_lag2, by = c("superid", "round"))
+
+# Merge with current round data
+data1 = merge(x=data0,y=data_lag_long,all.x=T,all.y=F,by=c("superid","round"))
+
+# Transform behavior time to log scale
 data1$log_behaviorTime = log10(data1$behaviorTime)
 data1$log_behaviorTime_lag = log10(data1$behaviorTime_lag)
+
+# Create categorical behavior
+data1 = data1 %>% mutate(behavior = case_when(behavior_coop == 1 ~ "C",
+                                      behavior_defect == 1 ~ "D",
+                                      behavior_punish == 1 ~ "P"),
+                 behavior_lag = case_when(behavior_coop_lag == 1 ~ "C",
+                                          behavior_defect_lag ==1 ~ "D",
+                                          behavior_punish_lag == 1 ~ "P"),
+                 behavior_lag2 = case_when(behavior_coop_lag2 == 1 ~ "C",
+                                           behavior_defect_lag2 == 1 ~ "D",
+                                           behavior_punish_lag2 == 1 ~ "P"))
+
+data1[data1$superid == 2214, "age"] = NA # outlier
+
+# Adding initial centrality measures
+load("~/Documents/Projects/harming_esn/Data/harming_jsons/ldata4_0316X.Rdata") #ldata4
+load("~/Documents/Projects/harming_esn/Data/ndata_individual.Rdata") #ndata1
+
+cent_df = tibble(superid = NULL,
+                 starting_ec = NULL,
+                 starting_dc = NULL)
+for(i in 1:50){
+  ndata_r0 = ndata1 %>% filter(game == i, round == 0) %>% relocate(id)
+  r0_el = ldata4 %>% filter(game == i, round == 0) %>% select(id1, id2)
+  g = graph_from_data_frame(r0_el, directed = T, vertices = ndata_r0)
+  tmp_df = tibble(superid = 100*i+parse_number(names(eigen_centrality(g)$vector)),
+                  starting_ec = eigen_centrality(g)$vector,
+                  starting_dc = degree(g))
+  cent_df = rbind(cent_df, tmp_df)
+}
+
+data1 = merge(data1, cent_df, by = "superid")
+
+#replace NaNs (from missing lag data) with NAs
+data1[is.na(data1) == T] = NA
 ```
 
-## Making the conflict variables
+## Basic statistics about the games
 
-Conflict defined as:
+```{r}
+# Checking sample sizes
+dim(mdata3) #10727 recorded actions
+length(unique(mdata3$superid)) #745 unique participants
 
-Harming, dichotomous to costly punishment + non-punishing harming (everything else = non-justifiable harming?)
+# Demographics
+demo_df = harmdata %>% filter(round == 2)
+length(harmdata %>% filter(round == 2) %>% pull(unique(superid))) 
+#713 individuals through round 2
 
-Criteria for costly punishment: cooperation at a prior round x the local cooperation rate at a prior round of <50% [note: downtrend but not 50% yet <- too early to justify? = preventive costly punishment?]
+# Age
+mean(demo_df$age, na.rm = T) #32.86 years old
 
-want to identify decision shifts + characterize them based on rate of cooperation. 
-- Costly punishment: from c -> p based on local_rate_coop <50%
-    - can be a gradient for this (i.e. 75->51%, etc.)
+# Gender
+xtabs(~gender, demo_df) # 499 provided gender, F: 206 (41%) vs M: 392 (59%)
 
-Costly punishment is like a last-resort shock to wake the defecting others as a majority up and changes their behavior to cooperation (the defection rate needs to be >50% per rule). 
+# Country
+xtabs(~country_3cat, demo_df) #408 (57%) US, 257 (36%) India, 7% Other
+length(unique(harmdata$country))
 
-Peace = no harming in the round (very common?)
+# Behavior time
+mean(harmdata$behaviorTime, na.rm = T) #~7870 ms
 
-Evolution of peace = no harming over the recent and current 5 rounds? (common as well?)
+# Behaviors
+xtabs(~behavior_punish + behavior_defect + behavior_coop, harmdata)
 
-[We can check later if the result with harming is the same as that with costly punishment only and that with non-justifiable harming only]
+# How many peaceful/aggressive rounds
+peace_rounds = NULL
+punish_rounds = NULL
+for(i in 1:50){
+  tmp = harmdata %>% filter(game == i, round !=0) %>% group_by(round) %>% 
+  tally(behavior_punish) %>% group_by(n) %>% summarize(round_count = n())
+  peace_rounds = c(peace_rounds, 
+                   sum(tmp %>% filter(n == 0) %>% pull(round_count)))
+  punish_rounds = c(punish_rounds, 
+                    sum(tmp %>% filter(n != 0) %>% pull(round_count)))
+}
+
+sum(peace_rounds) #377 rounds with no punish choice
+sum(punish_rounds) #373 rounds with at least 1 punish choice
+```
+
+# Analysis
+
+## 1. What are the characteristics of people who chose to attack (=performing costly sanction)? (social/demographic/emotional) (who include attack in their behavior strategy?) We can evaluate this question using two approaches:
+
+```{r}
+# Make the categorical behavior variable
+data1b = data1 %>% mutate(behavior = case_when(behavior_coop == 1 ~ "C",
+                                      behavior_defect == 1 ~ "D",
+                                      behavior_punish == 1 ~ "P"),
+                 behavior_lag = case_when(behavior_coop_lag == 1 ~ "C",
+                                          behavior_defect_lag ==1 ~ "D",
+                                          behavior_punish_lag == 1 ~ "P"))
+data1_cc = na.omit(data1b)
+dim(data1_cc)
+```
+
+## Regression Models
+
+In general, the outcome for these models is the choice of punishing ("P") behavior vs. not choosing that behavior.
+
+### Model 1: Including both log behavior time and lag behavior time
+
+```{r}
+m1 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + log_behaviorTime + log_behaviorTime_lag + factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+se = sqrt(diag(vcov(m1)))
+# table of estimates with 95% CI
+tab_m1 = cbind(Est = fixef(m1), LL = fixef(m1) - 1.96 * se, UL = fixef(m1) + 1.96 * se)
+round(exp(tab_m1), digits = 3)[1:13,]
+```
+
+### Model 2: Only including log behavior time
+
+```{r}
+m2 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + log_behaviorTime  + factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+se = sqrt(diag(vcov(m2)))
+# table of estimates with 95% CI
+tab_m2 = cbind(Est = fixef(m2), LL = fixef(m2) - 1.96 * se, UL = fixef(m2) + 1.96 * se)
+round(exp(tab_m2), digits = 3)[1:12,]
+```
+
+### Model 3: Ignoring behavior time
+
+```{r}
+m3 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag+ factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+se = sqrt(diag(vcov(m3)))
+# table of estimates with 95% CI
+tab_m3 = cbind(Est = fixef(m3), LL = fixef(m3) - 1.96 * se, UL = fixef(m3) + 1.96 * se)
+round(exp(tab_m3), digits = 3)[1:11,]
+```
+
+#### Model 3b: Treating local punish rate from the previous round as categorical
+
+```{r}
+data1_cc$local_rate_punish_cat = case_when(data1_cc$local_rate_punish_lag == 0 ~ 0,
+                                          data1_cc$local_rate_punish_lag > 0 & data1_cc$local_rate_punish_lag <= 0.15 ~ 1,
+                                          data1_cc$local_rate_punish_lag > 0.15 ~ 2)
+
+m3_cat = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + factor(local_rate_punish_cat) +  cPayoffS_lag + degree_lag + happ_lag + factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+se = sqrt(diag(vcov(m3_cat)))
+# table of estimates with 95% CI
+tab_m3cat = cbind(Est = fixef(m3_cat), LL = fixef(m3_cat) - 1.96 * se, UL = fixef(m3_cat) + 1.96 * se)
+round(exp(tab_m3cat), digits = 3)[1:12,]
+```
+```{r}
+m3_tmp = glmer(behavior_punish ~ showScore + factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+se = sqrt(diag(vcov(m3_tmp)))
+# table of estimates with 95% CI
+tab_m3tmp = cbind(Est = fixef(m3_tmp), LL = fixef(m3_tmp) - 1.96 * se, UL = fixef(m3_tmp) + 1.96 * se)
+round(exp(tab_m3tmp), digits = 3)[1:12,]
+```
+```{r}
+data1_tmp = data1_cc %>% filter(behavior_coop_lag == 1)
+
+m3_tmp1 = glmer(behavior_punish ~ 1 + (1|game) + (1|superid), data1_tmp, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+se = sqrt(diag(vcov(m3_tmp1)))
+# table of estimates with 95% CI
+tab_m3tmp = cbind(Est = fixef(m3_tmp1), LL = fixef(m3_tmp1) - 1.96 * se, UL = fixef(m3_tmp1) + 1.96 * se)
+round(exp(tab_m3tmp), digits = 3)
+```
+
+```{r}
+data1_tmp = data1_cc %>% filter(behavior_punish_lag == 1)
+
+m3_tmp1 = glmer(behavior_punish ~ 1 + (1|game) + (1|superid), data1_tmp, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+se = sqrt(diag(vcov(m3_tmp1)))
+# table of estimates with 95% CI
+tab_m3tmp = cbind(Est = fixef(m3_tmp1), LL = fixef(m3_tmp1) - 1.96 * se, UL = fixef(m3_tmp1) + 1.96 * se)
+round(exp(tab_m3tmp), digits = 3)
+```
+
+#### Model 3c: Adding additional categories, treating local cooperation rate from the previous round as categorical
+
+Try 4 categories (0-24%, 25-49%, 50-74%, 75-100%) for cooperation to test for dose response.
+
+```{r}
+
+data1_cc$local_rate_punish_cat4 = 
+  case_when(data1_cc$local_rate_punish_lag >=0 & data1_cc$local_rate_punish_lag <= 0.05 ~ 0,
+            data1_cc$local_rate_punish_lag >0.05 & data1_cc$local_rate_punish_lag <= 0.1 ~ 1,
+            data1_cc$local_rate_punish_lag > 0.1 & data1_cc$local_rate_punish_lag <= 0.15 ~ 2,
+            data1_cc$local_rate_punish_lag > 0.15 & data1_cc$local_rate_punish_lag <= 0.2 ~ 3,
+            data1_cc$local_rate_punish_lag > 0.2 & data1_cc$local_rate_punish_lag <= 0.25 ~ 4,
+            data1_cc$local_rate_punish_lag > 0.25 ~ 5)
+
+hist(data1_cc$local_rate_coop)
+
+data1_cc$local_rate_coop_cat4 = 
+  case_when(data1_cc$local_rate_coop_lag > 0 & data1_cc$local_rate_coop_lag <= 0.1 ~ 4,
+            data1_cc$local_rate_coop_lag > 0.1 & data1_cc$local_rate_coop_lag <= 0.3 ~ 3,
+            data1_cc$local_rate_coop_lag > 0. & data1_cc$local_rate_coop_lag <= 0.6 ~ 2,
+            data1_cc$local_rate_coop_lag > 0.6 & data1_cc$local_rate_coop_lag <= 0.8 ~ 1,
+            data1_cc$local_rate_coop_lag > 0.8  ~ 0)
+
+round(addmargins(prop.table(xtabs(~local_rate_coop_cat4 + behavior_punish, data1_cc))), digits = 3)
+
+round(addmargins(prop.table(xtabs(~local_rate_coop_cat4 + behavior_punish, data1_cc), margin = 1), margin = 2), digits = 3)
+```
+
+```{r}
+m3_cat4 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + factor(local_rate_punish_cat4) + cPayoffS_lag + degree_lag + happ_lag + factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+summary(m3_cat4)
+
+se = sqrt(diag(vcov(m3_cat4)))
+# table of estimates with 95% CI
+tab_m3_cat4 = cbind(Est = fixef(m3_cat4), LL = fixef(m3_cat4) - 1.96 * se, UL = fixef(m3_cat4) + 1.96 * se)
+round(exp(tab_m3_cat4), digits = 3)[1:19,]
+```
+
+```{r}
+m3.1_cat = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + factor(local_rate_punish_cat) + cPayoffS_lag + degree_lag + happ_lag + log_behaviorTime + factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+se = sqrt(diag(vcov(m3_cat)))
+# table of estimates with 95% CI
+tab_m3.1cat = cbind(Est = fixef(m3.1_cat), LL = fixef(m3.1_cat) - 1.96 * se, UL = fixef(m3.1_cat) + 1.96 * se)
+round(exp(tab_m3.1cat), digits = 3)[1:13,] 
+```
+
+```{r}
+# Change to ryo's categories
+m4 = glmer(behavior_punish ~ factor(local_rate_punish_cat4) + factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+se = sqrt(diag(vcov(m4)))
+# table of estimates with 95% CI
+tab = cbind(Est = fixef(m4), LL = fixef(m4) - 1.96 * se, UL = fixef(m4) + 1.96 * se)
+round(exp(tab), digits = 3)[1:6,]
+```
+```{r}
+m5 = glmer(behavior_punish ~ factor(local_rate_coop_cat4) + factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+se = sqrt(diag(vcov(m5)))
+# table of estimates with 95% CI
+tab = cbind(Est = fixef(m5), LL = fixef(m5) - 1.96 * se, UL = fixef(m5) + 1.96 * se)
+round(exp(tab), digits = 3)[1:6,]
+```
+
+#### 1c) Evaluating characteristics of ever attackers
+
+```{r}
+ever_attackers = unique(harmdata %>% group_by(superid) %>% filter(behavior_punish == 1) %>% pull(superid))
+ever_cooperator = unique(harmdata %>% group_by(superid) %>% filter(behavior_coop == 1) %>% pull(superid))
+
+harmdata$ever_attacker = ifelse(harmdata$superid %in% ever_attackers, 1, 0)
+harmdata$ever_cooperator = ifelse(harmdata$superid %in% ever_cooperator, 1, 0)
+
+# Convert IPaddress to country
+library(rgeolocate)
+file = system.file("extdata","GeoLite2-Country.mmdb", package = "rgeolocate")
+ipCountries = maxmind(harmdata$ipAddress, file, "country_name")
+harmdata$country = ipCountries$country_name
+table(harmdata$country) #messy
+
+`%notin%` <- Negate(`%in%`)
+
+harmdata = harmdata %>% mutate(country_3cat = case_when(country == "United States" ~ "US",
+                                                        country == "India" ~ "India",
+                                                        country %notin% c("United States", "India") ~ "Other"))
+
+harmdata = harmdata %>% mutate(country_3cat = factor(country_3cat, levels = c("US", "India", "Other")))
+
+harmdata_clean = na.omit(harmdata)
+
+# use round 2 + take non-varying variables
+# check non-varying if usable - show other sociodemographic variables
+# IP address - country of origin?
+
+harmdata_no_rep = harmdata %>% filter(round == 2)
+
+# add PANAS variables
+m4 = glmer(ever_attacker ~ showScore + age + gender + country_3cat + (1|game), data = harmdata_no_rep, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+se = sqrt(diag(vcov(m4)))
+# table of estimates with 95% CI
+tab_m4 = cbind(Est = fixef(m4), LL = fixef(m4) - 1.96 * se, UL = fixef(m4) + 1.96 * se)
+round(exp(tab_m4), digits = 3) #Indian users more likely to choose punish?
+
+xtabs(~country_3cat + ever_attacker, harmdata_no_rep) # maybe - have less Indian users + more punishers overall
+
+chisq.test(table(harmdata_no_rep$country_3cat, harmdata_no_rep$ever_attacker))
+```
+
+**note**: Do naturally aggressive people learn to be less aggressive over games played with less aggressive players?
+
+1c) Looking at trends of harming over every round
+
+To see a global trend of the rate of harming over 15 rounds per each session, could you make a figure in which x axis is round, y axis is the rate of harming, and 50 linegraphs representing 50 sessions?
+
+```{r, fig.height =3, fig.width =5}
+data0_cc = na.omit(data0)
+
+data0_sum = data0_cc %>% group_by(game, round) %>% summarize(mean_punish_rate = mean(local_rate_punish)) 
+
+library(viridis)
+
+# Messy with all 50
+data0_sum %>% ggplot() + 
+  geom_line(aes(x= round, y = mean_punish_rate, group = factor(game), color = factor(game))) +
+  scale_x_continuous(breaks = c(1, 5, 10, 15),
+                   labels = c(1, 5, 10, 15)) +
+  scale_color_viridis(discrete = T) +
+  xlab("Round")+
+  ylab("Mean Local Punish Rate") +
+  theme(legend.position = c("none"))
+```
+
+```{r}
+# Try using smooth curve
+data0_sum %>% ggplot() + 
+  geom_smooth(aes(x= round, y = mean_punish_rate, group = factor(game), color = factor(game)),
+              method = "loess", se = FALSE) +
+  scale_x_continuous(breaks = c(1, 5, 10, 15),
+                   labels = c(1, 5, 10, 15)) +
+  scale_color_viridis(discrete = T) +
+  xlab("Round")+
+  ylab("Mean Local Punish Rate") +
+  theme(legend.position = c("none"))
+```
+
+```{r}
+#Clearer with groups of 25
+# Games 1-25
+data0_sum %>% filter(game %in% 1:25) %>% ggplot() + 
+  geom_smooth(aes(x= round, y = mean_punish_rate, group = factor(game), color = factor(game)),
+              method = "loess", formula = y ~ x, se = FALSE) +
+  scale_x_continuous(breaks = c(1, 5, 10, 15),
+                   labels = c(1, 5, 10, 15)) +
+  scale_color_viridis(discrete = TRUE) +
+  xlab("Round")+
+  ylab("Mean Local Punish Rate")+
+  theme(legend.position = c("none"))
+```
+
+```{r}
+# Games 26-50
+data0_sum %>% filter(game %in% 26:50) %>% ggplot() + 
+  geom_smooth(aes(x= round, y = mean_punish_rate, group = factor(game), color = factor(game)),
+              method = "loess", formula = y ~ x, se = FALSE) +
+  scale_x_continuous(breaks = c(1, 5, 10, 15),
+                   labels = c(1, 5, 10, 15)) +
+  scale_color_viridis(discrete = T) +
+  xlab("Round")+
+  ylab("Mean Local Punish Rate") +
+  theme(legend.position = c("none"))
+```
+
+#### 1d) Multinomial outcomes
+
+First, compare P vs. C+D (should be the same as the binary ones)
+
+```{r}
+data1_cc_1d = data1_cc %>% mutate(behavior_punish_binary = ifelse(behavior == "P", 1, 0))
+
+m1_1d = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + log_behaviorTime + log_behaviorTime_lag + factor(round) + (1|game) + (1|superid), data = data1_cc_1d, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+se = sqrt(diag(vcov(m1_1d)))
+# table of estimates with 95% CI
+tab_m1_1d = cbind(Est = fixef(m1_1d), LL = fixef(m1_1d) - 1.96 * se, UL = fixef(m1_1d) + 1.96 * se)
+round(exp(tab_m1_1d), digits = 3)[1:13,] # confirmed to be same
+```
+
+Now use multinomial behavior as the outcome (without and with time)
+
+```{r}
+library(mclogit)
+m2_1d = mblogit(behavior ~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round), random = ~ 1|superid/game, data = data1_cc_1d)
+```
+
+```{r}
+library(mgcv)
+
+data1_cc_1d = data1_cc_1d %>% mutate(behavior = factor(behavior, levels = c("C", "D", "P")),
+                                     behavior_numeric = case_when(behavior == "C" ~ 0,
+                                                                  behavior == "D" ~ 1,
+                                                                  behavior == "P" ~ 2))
+
+# Multinomial with random effects
+terms_list = list(behavior_numeric ~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"), ~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"),  ~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"), ~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"), ~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"), ~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"), ~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"), ~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"),~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"),~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"),~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"),~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re")) 
+
+terms_list =list(behavior_numeric ~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"), ~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"))
+
+m2_1d = gam(terms_list, data = data1_cc_1d, family = multinom(K = 2))
+
+
+# Without time
+m2_1d = gam(models, data = data1_cc_1d, family = multinom(K = 2))
+
+m2_1d = glmer(behavior ~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"), data = data1_cc_1d, family = multinom(K = 3))
+
+se = sqrt(diag(vcov(m2_1d)))
+# table of estimates with 95% CI
+tab_m2_1d = cbind(Est = fixef(m2_1d), LL = fixef(m2_1d) - 1.96 * se, UL = fixef(m2_1d) + 1.96 * se)
+round(exp(tab_m2_1d), digits = 3)[1:11,] # confirmed to be same
+```
+
+# 2. Supplemental Analyses
+
+## Measure variables straitifed by harming types
+
+```{r}
+# Start with data1b
+dim(data1b)
+
+# technically all round1 punishing (=49) would be random since no lag data
+data1b %>% filter(round == 1) %>% tally(behavior_punish)
+
+# for the rest of the rounds
+data1c = data1b  %>% 
+  mutate(j_harm = factor(ifelse(behavior_punish==1 & local_rate_coop_lag < 0.5, 1, 0), levels = c(0, 1)),
+         u_harm = factor(ifelse(behavior_punish==1 & local_rate_coop_lag >= 0.5, 1, 0), levels = c(0, 1)))
+
+dim(data1c) # ignoring rounds 0+1
+
+xtabs(~behavior_punish, data1c)
+xtabs(~j_harm + u_harm + behavior_punish, data1c)
+#201 instances of unjustified harm vs 307 instances of justified harm
+#562 - 508 = 54 #could not calculate justified/unjustified because no lag data
+```
+
+```{r}
+data1d = data1c %>% filter(is.na(behavior) == F)
+
+xtabs(~u_harm+j_harm, data1d)
+data1d %>% filter(behavior == "P", is.na(j_harm) == T)
+
+xtabs(~u_harm+j_harm+country_3cat,data1d) # indians were twice as more likely to harm, but they mostly engaged in justified harming (2/3)
+# US were 91/168 = 54% to justified harm
+
+ggplot() + geom_point(aes(x=age, y = u_harm), data1d)
+
+ggplot() + geom_boxplot(aes(x = j_harm, y = log_behaviorTime), data = data1d) #longer for justified harm
+j_harm_times = data1d %>% filter(j_harm == 1) %>% pull(log_behaviorTime)
+u_harm_times = data1d %>% filter(u_harm == 1) %>% pull(log_behaviorTime)
+mean(j_harm_times) #3.799
+mean(u_harm_times) #3.833 
+median(j_harm_times)
+median(u_harm_times)
+t.test(j_harm_times, u_harm_times) #not significant
+
+# interesting - about the same
+hist(u_harm_times)
+hist(j_harm_times)
+```
+
+## Stratified Regression
+
+First, create two datasets where harming is restricted to either justified or unjustified harming.
+
+```{r}
+# Unjustified only
+data1c_u = data1c %>% filter(j_harm != 1) %>% na.omit()
+
+# Justified only
+data1c_j = data1c %>% filter(u_harm != 1) %>% na.omit()
+```
+
+Then repeat the main regression analyses using these stratified data.
+
+```{r}
+#ignore NAs
+
+m1_u = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + log_behaviorTime + factor(round) + (1|game) + (1|superid), data = data1c_u, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+se = sqrt(diag(vcov(m1_u)))
+# table of estimates with 95% CI
+tab_m1_u = cbind(Est = fixef(m1_u), LL = fixef(m1_u) - 1.96 * se, UL = fixef(m1_u) + 1.96 * se)
+round(exp(tab_m1_u), digits = 3)[1:12,]
+```
+
+## Categorical Versions
+
+```{r}
+# since the mean degree among all obs is 5.8, we choose the thresholds to represent 0/~1/>1 punishers 
+
+data1c_u = data1c_u %>% mutate(punish_rate_lag_cat = case_when(local_rate_punish_lag == 0 ~ 0,
+                                         local_rate_punish_lag > 0 & local_rate_punish_lag <= 0.15 ~ 1,
+                                         local_rate_punish_lag > 0.175 ~ 2))
+
+m2_u = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + factor(punish_rate_lag_cat) + cPayoffS_lag + degree_lag + happ_lag + log_behaviorTime + factor(round) + (1|game) + (1|superid), data = data1c_u, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+se = sqrt(diag(vcov(m2_u)))
+# table of estimates with 95% CI
+tab_m2_u = cbind(Est = fixef(m2_u), LL = fixef(m2_u) - 1.96 * se, UL = fixef(m2_u) + 1.96 * se)
+round(exp(tab_m2_u), digits = 3)[1:13,]
+```
+
+```{r}
+data1c_j = data1c_j %>% mutate(punish_rate_lag_cat = case_when(local_rate_punish_lag == 0 ~ 0,
+                                         local_rate_punish_lag > 0 & local_rate_punish_lag <= 0.15 ~ 1,
+                                         local_rate_punish_lag > 0.15 ~ 2))
+
+m2_j = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + factor(punish_rate_lag_cat) + cPayoffS_lag + degree_lag + happ_lag + log_behaviorTime + factor(round) + (1|game) + (1|superid), data = data1c_j, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+se = sqrt(diag(vcov(m2_j)))
+# table of estimates with 95% CI
+tab_m2_j = cbind(Est = fixef(m2_j), LL = fixef(m2_j) - 1.96 * se, UL = fixef(m2_j) + 1.96 * se)
+round(exp(tab_m2_j), digits = 3)[1:13,]
+```
+
+The threshold-based relationship holds with justified harming but not unjustified harming
+
+G3) Group selection. I am interested in that among the 50 sessions, some are harming-rich (overall \>=10%? of decisions are harming) sessions, while some others are harming-less. You make categories (2 to 4?) based on the magnitude of harming-rich-less, and calculate the average cumulative payoff at the end of session. Determine which category achieves higher average cumulative payoff? Show boxplot with raw-data dots? -\> See Gachter 2008 Science
+
+```{r}
+library(reshape2)
+data1_groups = data1 %>% group_by(game) %>% 
+  count(behavior_punish, sort = F) %>% 
+  dcast(formula = game ~ behavior_punish, value.var = "n") 
+names(data1_groups) = c("game", "no_harm", "harm")
+data1_groups = data1_groups %>% mutate(harm = ifelse(is.na(harm) == T, 0, harm),
+                        harm_rate = round(harm/no_harm, 3))
+
+hist(data1_groups$harm_rate)
+data1_groups = data1_groups %>% mutate(harm_rate_cat = case_when(harm_rate >= 0 & harm_rate < 0.025 ~ 0,
+                                                  harm_rate >= 0.025 & harm_rate <0.05 ~ 1,
+                                                  harm_rate >= 0.05 & harm_rate < 0.1 ~ 2,
+                                                  harm_rate >= 0.1 ~ 3))
+xtabs(~harm_rate_cat, data1_groups)
+
+harm_cat0 = data1_groups %>% filter(harm_rate_cat == 0) %>% pull(game)
+harm_cat1 = data1_groups %>% filter(harm_rate_cat == 1) %>% pull(game)
+harm_cat2 = data1_groups %>% filter(harm_rate_cat == 2) %>% pull(game)
+harm_cat3 = data1_groups %>% filter(harm_rate_cat == 3) %>% pull(game)
+```
+
+```{r}
+data1 %>% group_by(game) %>%
+  filter(round !=0) %>% 
+  group_by(game, round) %>%
+  summarize(mean_payoff = mean(cumulativePayoff)) %>%
+  mutate(harm_category = case_when(game %in% harm_cat0 ~ 1,
+                                   game %in% harm_cat1 ~ 2,
+                                   game %in% harm_cat2 ~ 3,
+                                   game %in% harm_cat3 ~ 4)) %>%
+  ggplot() +
+  geom_line(aes(x = round, y = mean_payoff, group = game, 
+                color = factor(harm_category))) +
+  scale_color_brewer(palette = "Spectral") +
+  scale_x_continuous(breaks = c(1, 3, 5, 7, 9, 11, 13, 15))
+
+data1 %>% group_by(game) %>%
+  filter(round !=0) %>% 
+  group_by(game, round) %>%
+  summarize(mean_payoff = mean(cumulativePayoff)) %>%
+  mutate(harm_category = case_when(game %in% harm_cat0 ~ 1,
+                                   game %in% harm_cat1 ~ 2,
+                                   game %in% harm_cat2 ~ 3,
+                                   game %in% harm_cat3 ~ 4)) %>%
+  filter(round == 15) %>%
+  group_by(harm_category) %>%
+  summarize(mean_payoff_by_harmcat = mean(mean_payoff))
+```
+
+G4. RCT component: I remember the major cluster RCT component (visibility of wealth = visibility of fitness level) does not have an effect on the percentage of harming execution. But I did not check the effect of the other minor components: 1) the round0 score (1150 or 200 in initsccore?), 2) the round0 eigenvector centrality, and 3) the round0 degree centrality (number of social ties) - all of which were randomly assigned. Could you check these effects?
+
+#### Inital Score
+
+```{r}
+data1_4 = data1 %>% group_by(game) %>% 
+  filter(round == 0) %>% 
+  mutate(init_score_indicator = ifelse(initial_score == 200, "low", "high"),
+         harm_category = case_when(game %in% harm_cat0 ~ 1,
+                                   game %in% harm_cat1 ~ 2,
+                                   game %in% harm_cat2 ~ 3,
+                                   game %in% harm_cat3 ~ 4))
+
+# Can we use the percentage of high initial scores? (or lows)
+data1_4 %>% 
+  count(init_score_indicator, sort = F) %>% 
+  dcast(formula = game ~ init_score_indicator, value.var = "n") %>%
+  mutate(perc_high = high/(high+low),
+         harm_category = case_when(game %in% harm_cat0 ~ 1,
+                                   game %in% harm_cat1 ~ 2,
+                                   game %in% harm_cat2 ~ 3,
+                                   game %in% harm_cat3 ~ 4)) %>%
+  ggplot() + 
+  geom_boxplot(aes(x=factor(harm_category),y=low)) #high/low is the number of people with initial score 1150/200
+# don't see much of a trend
+xtabs(~init_score_indicator data1_4)
+round(addmargins(prop.table(xtabs(~harm_category + init_score_indicator, data1_4), margin = 2), margin = 2), digits = 3)
+
+```
+
+#### Looking at centrality measures
+
+round0 eigenvector centrality, and 3) the round0 degree centrality (number of social ties) - all of which were randomly assigned.
+
+### Adding starting centrality measures
+
+Then we use the centrality measures and initial score in regression (how else to operationalize?)
+
+```{r}
+data1_cc
+m5 = glmer(behavior_punish ~ showScore + age + gender + starting_ec + starting_dc + factor(initial_score) + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + factor(local_rate_punish_cat) + cPayoffS_lag + degree_lag + happ_lag + log_behaviorTime + factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+se = sqrt(diag(vcov(m5)))
+# table of estimates with 95% CI
+tab_m5 = cbind(Est = fixef(m5), LL = fixef(m5) - 1.96 * se, UL = fixef(m5) + 1.96 * se)
+round(exp(tab_m5), digits = 3)[1:16,]
+```
+
+G5) Ultimately, who are the winners? Winners will coop (keep ties), defect (keep ties), harm (keep ties), or cut ties when facing a majority of defection?
+
+G6) Maybe this is an important one - after people execute the harming option, do they become happier? compare it after they execute C or D.
+
+```{r}
+data1_6 = data1 %>% 
+  filter(behavior_punish_lag == 1) %>% 
+  group_by(game) %>%
+  mutate(happ = factor(happ, levels = c(-2, -1, 0, 1, 2)))
+xtabs(~happ, data1_6) #-2 vbad, -1bad, 0 neutral, 1good, 2 v_good
+prop.table(xtabs(~happ, data1_6)) #36+23 = 59% happy
+
+data1_6d = data1 %>% 
+  filter(behavior_defect_lag == 1) %>%
+  group_by(game) %>%
+  mutate(happ = factor(happ, levels = c(-2, -1, 0, 1, 2)))
+
+prop.table(xtabs(~happ, data1_6d)) #36 + 35 = 71% happy
+
+data1_6c = data1 %>% 
+  filter(behavior_coop_lag == 1) %>%
+  group_by(game) %>%
+  mutate(happ = factor(happ, levels = c(-2, -1, 0, 1, 2)))
+xtabs(~happ, data1_6c) 
+
+prop.table(xtabs(~happ, data1_6c)) #35+38 = 73% happy
+
+# What if we restrict this to only justified/unjustified
+data1_6e = data1 %>% 
+  filter(local_rate_punish_lag < 0.5 & behavior_punish_lag == 1) %>% 
+  group_by(game) %>%
+  mutate(happ = factor(happ, levels = c(-2, -1, 0, 1, 2)))
+prop.table(xtabs(~happ, data1_6e)) #37+23 = 60% happy
+
+data1_6f = data1 %>% 
+  filter(local_rate_punish_lag >= 0.5 & behavior_punish_lag == 1) %>% 
+  group_by(game) %>%
+  mutate(happ = factor(happ, levels = c(-2, -1, 0, 1, 2)))
+prop.table(xtabs(~happ, data1_6f)) #38+15 = 53% happy
+
+```
+
+## Measuring trends of happiness after P choice
+
+```{r}
+library(panelr)
+data1_8 = data1 %>% 
+  filter(behavior_punish_lag == 1) %>% 
+  mutate(round_lag = round - 1) %>%
+  select(superid, round, happ, round_lag, happ_lag) %>%
+  rename(rB_round = round, rB_happ = happ, rA_round = round_lag, rA_happ = happ_lag) %>%
+  long_panel(prefix = "r", suffix = "_", label_location = "beginning",
+             begin = "A", end = "B")
+
+data1_9 = data1 %>% 
+  filter(behavior_punish_lag == 1) %>% 
+  mutate(round_lag = round - 1) %>%
+  select(superid, round, happ, round_lag, happ_lag) %>%
+  mutate(happ_diff = happ - happ_lag,
+         happ_change = case_when(happ_diff >0 ~ "more happy",
+                                 happ_diff ==0 ~ "no change",
+                                 happ_diff <0 ~ "more unhappy"))
+
+data1_10 = data1 %>% 
+  filter(behavior_coop_lag == 1) %>% 
+  mutate(round_lag = round - 1) %>%
+  select(superid, round, happ, round_lag, happ_lag) %>%
+  mutate(happ_diff = happ - happ_lag,
+         happ_change = case_when(happ_diff >0 ~ "more happy",
+                                 happ_diff ==0 ~ "no change",
+                                 happ_diff <0 ~ "more unhappy"))
+
+data1_11 = data1 %>% 
+  filter(behavior_defect_lag == 1) %>% 
+  mutate(round_lag = round - 1) %>%
+  select(superid, round, happ, round_lag, happ_lag) %>%
+  mutate(happ_diff = happ - happ_lag,
+         happ_change = case_when(happ_diff >0 ~ "more happy",
+                                 happ_diff ==0 ~ "no change",
+                                 happ_diff <0 ~ "more unhappy"))
+
+data1_agg_p = tibble(behavior = "P",
+                     mean_change = mean(data1_9$happ_diff),
+                     sd_change = sd(data1_9$happ_diff),
+                     mean_abs_change = mean(abs(data1_9$happ_diff)),
+                     sd_abs_change = sd(abs(data1_9$happ_diff)))
+data1_agg_c = tibble(behavior = "C",
+                     mean_change = mean(data1_10$happ_diff),
+                     sd_change = sd(data1_10$happ_diff),
+                     mean_abs_change = mean(abs(data1_10$happ_diff)),
+                     sd_abs_change = sd(abs(data1_10$happ_diff)))
+data1_agg_d = tibble(behavior = "D",
+                     mean_change = mean(data1_11$happ_diff),
+                     sd_change = sd(data1_11$happ_diff),
+                     mean_abs_change = mean(abs(data1_11$happ_diff)),
+                     sd_abs_change = sd(abs(data1_11$happ_diff)))
+rbind(data1_agg_p, data1_agg_c, data1_agg_d)
+
+# data1_9 (P)/ data1_10 (C) / data1_11 (D) -=> groups 1/2/3
+length(data1_9$happ_diff)
+for_aov = tibble(group = c(rep(1,length(data1_9$happ_diff)), 
+                           rep(2, length(data1_10$happ_diff)), 
+                           rep(3, length(data1_11$happ_diff))),
+                 happ_diff = c(data1_9$happ_diff, 
+                               data1_10$happ_diff, 
+                               data1_11$happ_diff))
+summary(aov(for_aov$happ_diff ~ for_aov$group))
+
+t.test(data1_9$happ_diff, data1_10$happ_diff)
+t.test(data1_9$happ_diff, data1_11$happ_diff)
+t.test(data1_10$happ_diff, data1_11$happ_diff)
+
+```
+
+## Regression looking at happiness difference
+
+```{r}
+## Compare C vs. P
+data1_13 = data1 %>% mutate(happ_diff = happ - happ_lag,
+                            happ_diff2 = happ_lag - happ_lag2) 
+
+# happ - round t
+# happ_lag - round t-1
+# happ_lag2 - round t-2
+
+xtabs(~behavior_lag + behavior_punish_lag, data1)
+
+mean(data1_13 %>% filter(behavior_punish == 1) %>% pull(happ_diff), na.rm = T) #-0.076
+mean(data1_13 %>% filter(behavior_defect == 1) %>% pull(happ_diff), na.rm = T) #0.066
+mean(data1_13 %>% filter(behavior_coop == 1) %>% pull(happ_diff), na.rm = T) #-0.017
+
+mean(data1_13 %>% filter(behavior_punish_lag == 1) %>% pull(happ_diff), na.rm = T) #0.083
+mean(data1_13 %>% filter(behavior_defect_lag == 1) %>% pull(happ_diff), na.rm = T) #-0.045
+mean(data1_13 %>% filter(behavior_coop_lag == 1) %>% pull(happ_diff), na.rm = T) #0.055
+
+mean(data1_13 %>% filter(behavior_punish_lag2 == 1) %>% pull(happ_diff), na.rm = T) #-0.004
+mean(data1_13 %>% filter(behavior_defect_lag2 == 1) %>% pull(happ_diff), na.rm = T) #0.004
+mean(data1_13 %>% filter(behavior_coop_lag2 == 1) %>% pull(happ_diff), na.rm = T) #0.005
+
+mean(data1_13 %>% filter(behavior_punish == 1 & behavior_defect_lag == 1) %>% pull(happ_diff), na.rm = T) #-0.17
+mean(data1_13 %>% filter(behavior_punish == 1 & behavior_coop_lag == 1) %>% pull(happ_diff), na.rm = T) #-0.022
+
+mean(data1_13 %>% filter(behavior_defect == 1 & behavior_defect_lag == 1) %>% pull(happ_diff), na.rm = T) #0.002
+mean(data1_13 %>% filter(behavior_defect == 1 & behavior_coop_lag == 1) %>% pull(happ_diff), na.rm = T) #0.34
+
+mean(data1_13 %>% filter(behavior_coop == 1 & behavior_defect_lag == 1) %>% pull(happ_diff), na.rm = T) #-0.24
+mean(data1_13 %>% filter(behavior_coop == 1 & behavior_coop_lag == 1) %>% pull(happ_diff), na.rm = T) #0.009
+
+mean(data1_13 %>% filter(behavior_punish == 1 & behavior_punish_lag == 1) %>% pull(happ_diff), na.rm = T) #-0.058
+mean(data1_13 %>% filter(behavior_defect == 1 & behavior_punish_lag == 1) %>% pull(happ_diff), na.rm = T) #0.24
+mean(data1_13 %>% filter(behavior_coop == 1 & behavior_punish_lag == 1) %>% pull(happ_diff), na.rm = T) #0.112
+
+length(data1_13 %>% filter(behavior_defect == 1 & behavior_punish_lag == 1) %>% pull(happ_diff)) #146
+length(data1_13 %>% filter(behavior_coop == 1 & behavior_punish_lag == 1) %>% pull(happ_diff)) #169
+length(data1_13 %>% filter(behavior_punish == 1 & behavior_punish_lag == 1) %>% pull(happ_diff)) #205
+
+mean(data1_13 %>% filter(behavior_punish == 1 & behavior_punish_lag == 1) %>% pull(happ_diff), na.rm = T) #-0.058
+mean(data1_13 %>% filter(behavior_punish == 1 & behavior_defect_lag == 1) %>% pull(happ_diff), na.rm = T) #-0.17
+mean(data1_13 %>% filter(behavior_punish == 1 & behavior_coop_lag == 1) %>% pull(happ_diff), na.rm = T) #-0.022
+
+mean(data1_13 %>% filter(behavior_defect == 1 & behavior_punish_lag == 1) %>% pull(happ_diff), na.rm = T) #0.24
+mean(data1_13 %>% filter(behavior_defect == 1 & behavior_defect_lag == 1) %>% pull(happ_diff), na.rm = T) #0.002
+mean(data1_13 %>% filter(behavior_defect == 1 & behavior_coop_lag == 1) %>% pull(happ_diff), na.rm = T) #0.34
+
+mean(data1_13 %>% filter(behavior_coop == 1 & behavior_punish_lag == 1) %>% pull(happ_diff), na.rm = T) #0.112
+mean(data1_13 %>% filter(behavior_coop == 1 & behavior_defect_lag == 1) %>% pull(happ_diff), na.rm = T) #-0.24
+mean(data1_13 %>% filter(behavior_coop == 1 & behavior_coop_lag == 1) %>% pull(happ_diff), na.rm = T) #0.009
+
+summary(lm(happ_diff ~ factor(behavior), data = data1_13))
+summary(lm(happ_diff ~ factor(behavior_lag, levels = c("C", "D", "P")), data = data1_13))
+summary(lm(happ_diff2 ~ factor(behavior_lag2), data = data1_13))
+lm(happ_diff ~ factor(behavior, levels = c("C", "D", "P")), data = data1_13)
+
+m6 = lmer(happ_diff ~ showScore + age + gender + factor(behavior_lag) + happ_lag + local_rate_punish + local_rate_coop + log_behaviorTime + factor(round) + (1|game) + (1|superid), data = data1_13)
+summary(m6)
+```
+
+## Counting rounds of harming and plotting end happinness
+
+```{r}
+# Get the counts of each user's harming
+total_harming = data1 %>% 
+  group_by(superid) %>%
+  tally(behavior_punish == 1) %>%
+  rename(harms = n)
+
+# Get each user's round 15 happiness
+rd15_happ = data1 %>% 
+  filter(round == 15) %>%
+  group_by(superid) %>%
+  tally(happ) %>%
+  rename(happ = n)
+
+data1_14 = left_join(total_harming, rd15_happ, by = "superid")
+
+data1_14
+table(factor(data1_14$harms))
+
+harms_by_happ = data1_14 %>% 
+  group_by(harms) %>%
+  summarize(mean_happ = mean(happ, na.rm = T))
+
+harms_by_happ
+
+h_vec = harms_by_happ$mean_happ
+names(h_vec) = c(0:8,10, 12:15)
+h_vec
+```
+
+## Looking at the 3-round trend
+
+```{r}
+tmp1 = data1 %>% 
+  filter(behavior_punish_lag2 == 1) %>% 
+  mutate(round_lag = round - 1, round_lag2 = round - 2) %>%
+  select(superid, round, round_lag, round_lag2, happ, happ_lag, happ_lag2) %>%
+  rename(rC_round = round, rC_happ = happ, 
+         rB_round = round_lag, rB_happ = happ_lag,
+         rA_round = round_lag2, rA_happ = happ_lag2) %>%
+  long_panel(prefix = "r", suffix = "_", label_location = "beginning",
+             begin = "A", end = "C") %>%
+  mutate(superid = factor(superid)) %>%
+  filter(id %in% 1:5) 
+```
+
+## Checking the immediate change of happiness after choosing each behavior
+
+```{r}
+data1_12p = data1 %>% 
+  filter(behavior_punish_lag2 == 1) %>% 
+  mutate(round_lag = round - 1, round_lag2 = round - 2) %>%
+  select(superid, round, round_lag, round_lag2, happ, happ_lag, happ_lag2) %>%
+  mutate(happ_diff = happ - happ_lag, 
+         happ_diff2 = happ_lag-happ_lag2,
+         total_happ_change = abs(happ_diff) + abs(happ_diff2),
+         overall_happ_diff = happ - happ_lag2,
+         overall_happ_cat = case_when(overall_happ_diff >0 ~ "more happy",
+                                      overall_happ_diff ==0 ~ "no change",
+                                      overall_happ_diff <0 ~ "more unhappy"))
+data1_12c = data1 %>% 
+  filter(behavior_coop_lag2 == 1) %>% 
+  mutate(round_lag = round - 1, round_lag2 = round - 2) %>%
+  select(superid, round, round_lag, round_lag2, happ, happ_lag, happ_lag2) %>%
+  mutate(happ_diff = happ - happ_lag, happ_diff2 = happ_lag-happ_lag2,
+         total_happ_change = abs(happ_diff) + abs(happ_diff2),
+         overall_happ_diff = happ - happ_lag2,
+         overall_happ_cat = case_when(overall_happ_diff >0 ~ "more happy",
+                                      overall_happ_diff ==0 ~ "no change",
+                                      overall_happ_diff <0 ~ "more unhappy"))
+
+data1_12d = data1 %>% 
+  filter(behavior_defect_lag2 == 1) %>% 
+  mutate(round_lag = round - 1, round_lag2 = round - 2) %>%
+  select(superid, round, round_lag, round_lag2, happ, happ_lag, happ_lag2) %>%
+  mutate(happ_diff = happ - happ_lag, happ_diff2 = happ_lag-happ_lag2,
+         total_happ_change = abs(happ_diff) + abs(happ_diff2),
+         overall_happ_diff = happ - happ_lag2,
+         overall_happ_cat = case_when(overall_happ_diff >0 ~ "more happy",
+                                      overall_happ_diff ==0 ~ "no change",
+                                      overall_happ_diff <0 ~ "more unhappy"))
+xtabs(~factor(total_happ_change), data1_12)
+
+data1_12$happ_diff2
+
+data1_12_abs = tibble(behavior = "P",
+                      mean_change =  mean(data1_12$happ_diff2),
+                      mean_abs_change = mean(abs(data1_12$happ_diff2)),
+                      sd_change = mean(sd(data1_12$happ_diff2)))
+data1_12_abs_c = tibble(behavior = "C",
+                        mean_change =  mean(data1_12c$happ_diff2),
+                        mean_abs_change = mean(abs(data1_12c$happ_diff2)),
+                        sd_change = mean(sd(data1_12c$happ_diff2)))
+data1_12_abs_d = tibble(behavior = "D",
+                        mean_change =  mean(data1_12d$happ_diff2),
+                        mean_abs_change = mean(abs(data1_12d$happ_diff2)),
+                        sd_change = mean(sd(data1_12d$happ_diff2)))
+rbind(data1_12_abs, data1_12_abs_c, data1_12_abs_d)
+```
+
+```{r}
+xtabs(~factor(overall_happ_cat), data1_12)
+
+data1_12_rA = tibble(rd = "first",
+                     happ_mean = mean(data1_12$happ_lag2), 
+                     happ_sd = sd(data1_12$happ_lag2))
+data1_12_rB = tibble(rd = "second",
+                     happ_mean = mean(data1_12$happ_lag), 
+                     happ_sd = sd(data1_12$happ_lag))
+data1_12_rC = tibble(rd = "third",
+                     happ_mean = mean(data1_12$happ),
+                     happ_sd = sd(data1_12$happ))
+data1_12_means=rbind(data1_12_rA, data1_12_rB, data1_12_rC)
+                     
+data1_12_means
+```
+
+# Evaluating rewiring as the outcome
+
+```{r}
+load("~/Documents/Projects/harming_esn/Data/harming_jsons/ldata4_0316X.Rdata") #ldata4
+load("~/Documents/Projects/harming_esn/Data/ndata_individual.Rdata") #ndata1
+
+ndata_alters = ndata1 %>% 
+  select(round, game, starts_with("id")) %>%
+  filter(round != 0) %>%
+  mutate(across(starts_with("id"), ~100*game+parse_number(.))) %>%
+  pivot_longer(cols = starts_with("id2")) %>%
+  na.omit() %>%
+  rename(superid = id,
+         alter_id = value)
+
+data_alters_list = ndata1 %>% 
+  select(round, game, starts_with("id")) %>%
+  filter(round != 0) %>%
+  mutate(across(starts_with("id"), ~100*game+parse_number(.))) %>%
+  rename(superid = id) %>%
+  unite(alters, starts_with("id2"), sep = ",", na.rm = T, remove = T) %>%
+  mutate(alters = str_split(alters, ","))
+
+tmp1 = data_alters_list %>% filter(game == 1, round == 1, id == 110)
+
+covars = harmdata %>% 
+  filter(round != 0) %>%
+  select(round, game, superid, scoreA, scoreB, percentA, behavior_coop, 
+         behavior_punish, behavior_defect, gender, age, country_3cat)
+
+data_alters_list
+
+ndata_base = left_join(data_alters_list, covars, by = c("round", "game", "superid"))
+
+ndata_base
+
+alter_behaviors = covars %>% 
+  select(superid, game, round, behavior_coop, 
+         behavior_punish, behavior_defect) %>%
+  arrange(game, round) %>%
+  rename(alter_id = superid,
+         alter_behavior_coop = behavior_coop,
+         alter_behavior_punish = behavior_punish,
+         alter_behavior_defect = behavior_defect)
+
+ndata_base_alters = left_join(ndata_base, alter_behaviors, by = c("round", "game", "alter_id"))
+
+# Need a list of alters from the previous round
+
+ndata_base_alters %>%
+  filter(round %in% 1:2, game == 1, superid == 110) %>%
+  mutate(new_tie = ifelse(alter_id %in% ndata_base_alters %>% filter(round == round - 1) %>% pull(alter_id), 0, 1))
+
+ndata_base_lag = ndata_base_alters %>% 
+  select(superid, round, alter_id, scoreA, scoreB, percentA, behavior_coop, 
+         behavior_punish, behavior_defect, alter_behavior_coop, 
+         alter_behavior_punish, alter_behavior_defect)
+
+names(ndata_base_lag)[-c(1:2)] = paste0(names(ndata_base_lag)[-c(1,2)],"_lag")
+ndata_base_lag$round = ndata_base_lag$round+1
+
+ndata_newties = merge(ndata_base_alters, ndata_base_lag, by = c("superid", "round")) %>%
+  arrange(superid, game, round) %>%
+  mutate(new_tie = ifelse(alter_id == alter_id_lag, 0, 1)) %>%
+  select(superid, round, game, alter_id, alter_id_lag, new_tie) 
+ndata_newties
+ndata_newties %>%
+  select(round, game, superid, alter_id, new_tie) %>%
+  distinct()
+
+#what is considered a rewiring?
+# Connect with the focal neighbor or not
+# Controlling for characteristic of the tie (new vs. old) + behavior
+```
+
+# Other things
 
 ```{r}
 names(data1)
@@ -203,6 +1178,7 @@ data2 %>%
 # the median punish time is a bit longer, but not by much - confirms repetition
 # is the fastest/easiest regardless of type
 ```
+
 ```{r}
 # Are there differences for the different combinations? CD CP DC DP PC PD
 data2 = data2 %>% mutate(diff_cats = case_when(behavior == "C" & behavior_lag == "D" ~ "CD",
@@ -219,7 +1195,7 @@ data2 %>%
 # Going back to cooperation is faster
 ```
 
-```{r}  
+```{r}
 # C -> P
 grouped_means_c_to_p = coop_to_not_coop %>% 
   filter(behavior_punish == 1) %>% 
@@ -313,267 +1289,17 @@ non_coop_times = coop_to_p %>% filter(noncoop_env == 1) %>% pull(log_behaviorTim
 t.test(coop_times, non_coop_times, var.equal = F) # no different in time based on environment
 ```
 
-## Answering questions about the games
+    Make decision conflict - when people are cooperative, cooperation should be faster. When people are aggressive, aggression should be faster.
 
-How many times does peace occur (i.e. in one round, no harming is chosen)?
+    Repetition is easier since you copy what others are doing.
 
-```{r}
-
-```
-
-## Analysis
-
-### 1. What are the characteristics of people who chose to attack (=performing costly sanction)? (social demographic emotional) (who include attack in their behavior strategy?) We can evaluate this question using two approaches: 
-
-#### a) Using the binary attack indicator (so factors influencing specific individual choices) 
-    
-```{r}
-names(data1)
-# Make the categorical behavior variable
-data1b = data1 %>% mutate(behavior = case_when(behavior_coop == 1 ~ "C",
-                                      behavior_defect == 1 ~ "D",
-                                      behavior_punish == 1 ~ "P"),
-                 behavior_lag = case_when(behavior_coop_lag == 1 ~ "C",
-                                          behavior_defect_lag ==1 ~ "D",
-                                          behavior_punish_lag == 1 ~ "P"))
-data1_cc = na.omit(data1b)
-dim(data1_cc)
-```
-
-## Binary outcomes
-
-```{r}
-m1 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + log_behaviorTime + log_behaviorTime_lag + factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
-
-se = sqrt(diag(vcov(m1)))
-# table of estimates with 95% CI
-tab_m1 = cbind(Est = fixef(m1), LL = fixef(m1) - 1.96 * se, UL = fixef(m1) + 1.96 * se)
-round(exp(tab_m1), digits = 3)[1:13,]
-```
-
-```{r}
-m2 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + log_behaviorTime  + factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
-se = sqrt(diag(vcov(m2)))
-# table of estimates with 95% CI
-tab_m2 = cbind(Est = fixef(m2), LL = fixef(m2) - 1.96 * se, UL = fixef(m2) + 1.96 * se)
-round(exp(tab_m2), digits = 3)[1:12,]
-```
-
-```{r}
-m3 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag+ factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
-se = sqrt(diag(vcov(m3)))
-# table of estimates with 95% CI
-tab_m3 = cbind(Est = fixef(m3), LL = fixef(m3) - 1.96 * se, UL = fixef(m3) + 1.96 * se)
-round(exp(tab_m3), digits = 3)[1:11,]
-```
-#### Trying model 3 with categorical rate
-
-```{r}
-data1_cc$local_rate_punish_cat = case_when(data1_cc$local_rate_punish_lag == 0 ~ 0,
-                                          data1_cc$local_rate_punish_lag > 0 & data1_cc$local_rate_punish_lag <= 0.15 ~ 1,
-                                          data1_cc$local_rate_punish_lag > 0.15 ~ 2)
-xtabs(~behavior_punish + local_rate_punish_cat, data1_cc)
-
-m3_cat = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + factor(local_rate_punish_cat) +  cPayoffS_lag + degree_lag + happ_lag + factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
-se = sqrt(diag(vcov(m3_cat)))
-# table of estimates with 95% CI
-tab_m3cat = cbind(Est = fixef(m3_cat), LL = fixef(m3_cat) - 1.96 * se, UL = fixef(m3_cat) + 1.96 * se)
-round(exp(tab_m3cat), digits = 3)[1:12,]
-```
- 
-#### 1b) Add more categories to category 2?
-    
-Try 4 categories (0-24%, 25-49%, 50-74%, 75-100%) for cooperation to test for dose response.
-    
-```{r}
-data1_cc$local_rate_punish_cat4 = case_when(data1_cc$local_rate_punish_lag >=0 & data1_cc$local_rate_punish_lag < 0.24 ~ 0,
-                                            data1_cc$local_rate_punish_lag >=0.25 & data1_cc$local_rate_punish_lag < 0.49 ~ 1,
-                                            data1_cc$local_rate_punish_lag >=0.5 & data1_cc$local_rate_punish_lag < 0.74 ~ 2,
-                                            data1_cc$local_rate_punish_lag >=0.75 & data1_cc$local_rate_punish_lag ~ 3)
-
-data1_cc$local_rate_coop_cat4 = case_when(data1_cc$local_rate_coop_lag >=0 & data1_cc$local_rate_coop_lag < 0.24 ~ 0,
-                                            data1_cc$local_rate_coop_lag >=0.25 & data1_cc$local_rate_coop_lag < 0.49 ~ 1,
-                                            data1_cc$local_rate_coop_lag >=0.5 & data1_cc$local_rate_coop_lag < 0.74 ~ 2,
-                                            data1_cc$local_rate_coop_lag >=0.75 & data1_cc$local_rate_coop_lag ~ 3)
-
-round(addmargins(prop.table(xtabs(~local_rate_coop_cat4 + behavior_punish, data1_cc))), digits = 3)
-
-round(addmargins(prop.table(xtabs(~local_rate_coop_cat4 + behavior_punish, data1_cc), margin = 1), margin = 2), digits = 3)
-
-m3_coop_cat4 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + factor(local_rate_coop_cat4) + behavior_punish_lag + local_rate_punish_lag  + cPayoffS_lag + degree_lag + happ_lag + factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
-
-se = sqrt(diag(vcov(m3_coop_cat4)))
-# table of estimates with 95% CI
-tab_m3_coop_cat4 = cbind(Est = fixef(m3_coop_cat4), LL = fixef(m3_coop_cat4) - 1.96 * se, UL = fixef(m3_coop_cat4) + 1.96 * se)
-round(exp(tab_m3_coop_cat4), digits = 3)[1:12,]
-```
-
-```{r}
-m3.1_cat = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + factor(local_rate_punish_cat) + cPayoffS_lag + degree_lag + happ_lag + log_behaviorTime + factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
-se = sqrt(diag(vcov(m3_cat)))
-# table of estimates with 95% CI
-tab_m3.1cat = cbind(Est = fixef(m3.1_cat), LL = fixef(m3.1_cat) - 1.96 * se, UL = fixef(m3.1_cat) + 1.96 * se)
-round(exp(tab_m3.1cat), digits = 3)[1:13,] 
-```
-
-#### 1c) Evaluating characteristics of ever attackers
-    
-```{r}
-ever_attackers = unique(harmdata %>% group_by(superid) %>% filter(behavior_punish == 1) %>% pull(superid))
-ever_cooperator = unique(harmdata %>% group_by(superid) %>% filter(behavior_coop == 1) %>% pull(superid))
-
-harmdata$ever_attacker = ifelse(harmdata$superid %in% ever_attackers, 1, 0)
-harmdata$ever_cooperator = ifelse(harmdata$superid %in% ever_cooperator, 1, 0)
-
-# Convert IPaddress to country
-library(rgeolocate)
-file = system.file("extdata","GeoLite2-Country.mmdb", package = "rgeolocate")
-ipCountries = maxmind(harmdata$ipAddress, file, "country_name")
-harmdata$country = ipCountries$country_name
-table(harmdata$country) #messy
-
-`%notin%` <- Negate(`%in%`)
-
-harmdata = harmdata %>% mutate(country_3cat = case_when(country == "United States" ~ "US",
-                                                        country == "India" ~ "India",
-                                                        country %notin% c("United States", "India") ~ "Other"))
-
-harmdata = harmdata %>% mutate(country_3cat = factor(country_3cat, levels = c("US", "India", "Other")))
-
-harmdata_clean = na.omit(harmdata)
-
-# use round 2 + take non-varying variables
-# check non-varying if usable - show other sociodemographic variables
-# IP address - country of origin?
-
-harmdata_no_rep = harmdata %>% filter(round == 2)
-
-# add PANAS variables
-m4 = glmer(ever_attacker ~ showScore + age + gender + country_3cat + (1|game), data = harmdata_no_rep, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
-
-se = sqrt(diag(vcov(m4)))
-# table of estimates with 95% CI
-tab_m4 = cbind(Est = fixef(m4), LL = fixef(m4) - 1.96 * se, UL = fixef(m4) + 1.96 * se)
-round(exp(tab_m4), digits = 3) #Indian users more likely to choose punish?
-
-xtabs(~country_3cat + ever_attacker, harmdata_no_rep) # maybe - have less Indian users + more punishers overall
-```
-
-**note**:
-Do naturally aggressive people learn to be less aggressive over games played with less aggressive players?
-
-1c) Looking at trends of harming over every round
-
-To see a global trend of the rate of harming over 15 rounds per each session, could you make a figure in which x axis is round, y axis is the rate of harming, and 50 linegraphs representing 50 sessions?
-
-```{r, fig.height =3, fig.width =5}
-data0_cc = na.omit(data0)
-
-data0_sum = data0_cc %>% group_by(game, round) %>% summarize(mean_punish_rate = mean(local_rate_punish)) 
-
-library(viridis)
-
-# Messy with all 50
-data0_sum %>% ggplot() + 
-  geom_line(aes(x= round, y = mean_punish_rate, group = factor(game), color = factor(game))) +
-  scale_x_continuous(breaks = c(1, 5, 10, 15),
-                   labels = c(1, 5, 10, 15)) +
-  scale_color_viridis(discrete = T) +
-  xlab("Round")+
-  ylab("Mean Local Punish Rate") +
-  theme(legend.position = c("none"))
-```
-```{r}
-data0_sum %>% filter(mean_punish_rate > 0.3)
-```
-
-```{r}
-# Try using smooth curve
-data0_sum %>% ggplot() + 
-  geom_smooth(aes(x= round, y = mean_punish_rate, group = factor(game), color = factor(game)),
-              method = "loess", se = FALSE) +
-  scale_x_continuous(breaks = c(1, 5, 10, 15),
-                   labels = c(1, 5, 10, 15)) +
-  scale_color_viridis(discrete = T) +
-  xlab("Round")+
-  ylab("Mean Local Punish Rate") +
-  theme(legend.position = c("none"))
-```
-```{r}
-#Clearer with groups of 25
-# Games 1-25
-data0_sum %>% filter(game %in% 1:25) %>% ggplot() + 
-  geom_smooth(aes(x= round, y = mean_punish_rate, group = factor(game), color = factor(game)),
-              method = "loess", formula = y ~ x, se = FALSE) +
-  scale_x_continuous(breaks = c(1, 5, 10, 15),
-                   labels = c(1, 5, 10, 15)) +
-  scale_color_viridis(discrete = TRUE) +
-  xlab("Round")+
-  ylab("Mean Local Punish Rate")+
-  theme(legend.position = c("none"))
-```
-
-```{r}
-# Games 26-50
-data0_sum %>% filter(game %in% 26:50) %>% ggplot() + 
-  geom_smooth(aes(x= round, y = mean_punish_rate, group = factor(game), color = factor(game)),
-              method = "loess", formula = y ~ x, se = FALSE) +
-  scale_x_continuous(breaks = c(1, 5, 10, 15),
-                   labels = c(1, 5, 10, 15)) +
-  scale_color_viridis(discrete = T) +
-  xlab("Round")+
-  ylab("Mean Local Punish Rate") +
-  theme(legend.position = c("none"))
-```
-
-
-#### 1d) Multinomial outcomes
-
-First, compare P vs. C+D (should be the same as the binary ones)
-
-```{r}
-data1_cc_1d = data1_cc %>% mutate(behavior_punish_binary = ifelse(behavior == "P", 1, 0))
-
-m1_1d = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + log_behaviorTime + log_behaviorTime_lag + factor(round) + (1|game) + (1|superid), data = data1_cc_1d, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
-
-se = sqrt(diag(vcov(m1_1d)))
-# table of estimates with 95% CI
-tab_m1_1d = cbind(Est = fixef(m1_1d), LL = fixef(m1_1d) - 1.96 * se, UL = fixef(m1_1d) + 1.96 * se)
-round(exp(tab_m1_1d), digits = 3)[1:13,] # confirmed to be same
-```
-Now use multinomial behavior as the outcome (without and with time)
-
-```{r}
-library(mgcv)
-
-
-data1_cc_1d = data1_cc_1d %>% mutate(behavior = factor(behavior, levels = c("C", "D", "P")),
-                                     behavior_numeric = case_when(behavior == "C" ~ 0,
-                                                                  behavior == "D" ~ 1,
-                                                                  behavior == "P" ~ 2))
-
-# Multinomial with random effects
-terms_list = list(behavior_numeric ~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"), ~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"),  ~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"), ~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"), ~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"), ~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"), ~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"), ~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"),~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"),~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"),~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"),~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re")) 
-
-m2_1d = gam(terms_list, data = data1_cc_1d, family = multinom(K = 12))
-
-
-# Without time
-m2_1d = gam(models, data = data1_cc_1d, family = multinom(K = 2))
-
-m2_1d = glmer(behavior ~ showScore + age + gender + factor(behavior_lag) + local_rate_coop_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + s(game, bs = "re") + s(superid, bs = "re"), data = data1_cc_1d, family = multinom(K = 3))
-
-se = sqrt(diag(vcov(m2_1d)))
-# table of estimates with 95% CI
-tab_m2_1d = cbind(Est = fixef(m2_1d), LL = fixef(m2_1d) - 1.96 * se, UL = fixef(m2_1d) + 1.96 * se)
-round(exp(tab_m2_1d), digits = 3)[1:11,] # confirmed to be same
-```
+    Decision of others in t-1 vs. index individual decision at t
 
 ### 2. Does longer thinking time stop attacks?
 
 Seems like more deliberation -> higher chance of attack. Less change in terms of rate of cooperation
 
-- Contingency table for behavior time
+-   Contingency table for behavior time
 
 ```{r}
 hist(data1$log_behaviorTime)
@@ -586,6 +1312,15 @@ data1_cc$behaviorTime_cat = case_when(data1_cc$log_behaviorTime >= 3 & data1_cc$
 
 round(addmargins(prop.table(xtabs(~behaviorTime_cat + behavior_punish, data1_cc), margin = 1), margin = 2), digits = 3)
 round(addmargins(prop.table(xtabs(~behaviorTime_cat + behavior_coop, data1_cc), margin = 1), margin = 2), digits = 3)
+
+data1 %>%
+  na.omit() %>%
+  ggplot() +
+  geom_boxplot(aes(x=behavior, y=log_behaviorTime)) +
+  theme_minimal() +
+  xlab("Behavior") +
+  ylab("log Decision Time") +
+  scale_x_discrete(labels = c("Cooperate", "Defect", "Punish"))
 ```
 
 ```{r}
@@ -611,7 +1346,7 @@ summary(data1[is.na(data1$behaviorTime)==0 & data1$behaviorTime>=9000 & data1$be
 ### 3. What factors stop consecutive attacks?
 
     a) Identify attack patterns - first, create a new dataset that characterizes behavior by each actor in consecutive rounds.
-    
+
 ```{r}
 # Want the unit to be paired values
 # Basically want to combine the lag/cumulative values
@@ -671,13 +1406,14 @@ model5_result2
 # model5 = glm(behavior_pair2 ~ age + gender + showScore + initial_score + happ_diff + cPayoffS_diff + degree_diff + behaviorTime_diff, family = "binomial", data = data1_cs_short)
 # summary(model5)
 ```
+
 ```{r}
 # Multilevel multinomial?
 ```
 
 How to visualize this? Network visualization? 2D visual of progress showing each actor's strategy?
 
----
+------------------------------------------------------------------------
 
 # Next steps for this
 
@@ -685,7 +1421,7 @@ Add a lag 2 set of variables
 
 Interaction between lag1 and lag2
 
----
+------------------------------------------------------------------------
 
 ## 2. Building a network representation of activity
 
@@ -699,7 +1435,7 @@ library(igraph)
 library(tidygraph)
 library(RColorBrewer)
 
-# ndata1_r0 = ndata1 %>% filter(game == 1, round == 0) %>% relocate(id) %>% unnest()
+ndata1_r0 = ndata1 %>% filter(game == 1, round == 0) %>% relocate(id) 
 ndata1_r1 = ndata1 %>% filter(game == 1, round == 1) %>% relocate(id)
 ndata1_r2 = ndata1 %>% filter(game == 1, round == 2) %>% relocate(id) 
 ndata1_r3 = ndata1 %>% filter(game == 1, round == 3) %>% relocate(id) 
@@ -720,15 +1456,19 @@ ndata1_r15 = ndata1 %>% filter(game == 1, round == 15) %>% relocate(id)
 ```{r}
 # For game 1
 set.seed(123)
-# game1_round0_edgelist = ldata4 %>% filter(game == 1, round == 0) %>% dplyr::select(id1, id2)
-# g0 = graph_from_data_frame(game1_round0_edgelist, directed = T, vertices = ndata1_r0)
-# pal = brewer.pal(length(unique(V(g0)$behavior)), "Set1") #Red = D, Blue = C, Green = P
-# coords = layout.auto(g0)
+game1_round0_edgelist = ldata4 %>% filter(game == 1, round == 0) %>% dplyr::select(id1, id2)
+g0 = graph_from_data_frame(game1_round0_edgelist, directed = T, vertices = ndata1_r0)
+pal = brewer.pal(length(unique(V(g0)$behavior)), "Set1") #Red = D, Blue = C, Green = P
+
+coords = layout.auto(g0)
 
 game1_round1_edgelist = ldata4 %>% filter(game == 1, round == 1) %>% dplyr::select(id1, id2)
 g1 = graph_from_data_frame(game1_round1_edgelist, directed = T, vertices = ndata1_r1)
 pal = brewer.pal(length(unique(V(g1)$behavior)), "Set1") #Red = D, Blue = C, Green = P
 coords = layout.auto(g1)
+plot(g1,
+     layout = coords,
+     vertex.color = pal[as.numeric(factor(vertex_attr(g0, "behavior"), levels = c("D", "C", "P")))])
 
 game1_round2_edgelist = ldata4 %>% filter(game == 1, round == 2) %>% dplyr::select(id1, id2)
 g2 = graph_from_data_frame(game1_round2_edgelist, directed = T, vertices = ndata1_r2)
@@ -1097,8 +1837,7 @@ saveGIF({
 
 ## 3. Determining the influence of different harming patterns
 
-Finding 3) When people are harmed by two or more of the connecting neighbors, they are more likely to choose to harm the connecting neighbors; on the other hand, when people are harmed by only one of the connecting neighbors, their rate of harming choice is the same as that when they are harmed by no one. -> It implies that people in modern societies generally take a generous strategy in the present experiment setting, in which they can prevent their revengeful harming from indiscriminately harming all the connecting neighbors including harmers and non-harmers (cooperators or defectors). And, there is a threshold - such a threshold may work as a stopper of the vicious cycle of harming behavior.  OR one-shot really works as a cooperation enhancer? (but two harmers may produce harming trends?)
-[note: yes, a gunshot has a mistake] [note: dose-response for the number of innocent neighbors? only connecting with harmers may make revenge an easy option, "deterrent"??]
+Finding 3) When people are harmed by two or more of the connecting neighbors, they are more likely to choose to harm the connecting neighbors; on the other hand, when people are harmed by only one of the connecting neighbors, their rate of harming choice is the same as that when they are harmed by no one. -\> It implies that people in modern societies generally take a generous strategy in the present experiment setting, in which they can prevent their revengeful harming from indiscriminately harming all the connecting neighbors including harmers and non-harmers (cooperators or defectors). And, there is a threshold - such a threshold may work as a stopper of the vicious cycle of harming behavior. OR one-shot really works as a cooperation enhancer? (but two harmers may produce harming trends?) [note: yes, a gunshot has a mistake] [note: dose-response for the number of innocent neighbors? only connecting with harmers may make revenge an easy option, "deterrent"??]
 
 ```{r}
 data3 = data1 %>% 
@@ -1110,6 +1849,7 @@ hist(data3$count_local_coop_lag)
 hist(data3$count_local_defect_lag)
 hist(data3$count_local_punish_lag)
 ```
+
 ```{r}
 data3 %>% 
   filter(count_local_coop_lag == 0) %>%
@@ -1117,6 +1857,10 @@ data3 %>%
   geom_histogram(aes(x = e_degree), bins = 20)
 
 data3 %>% filter(count_local_punish_lag >= 2)
+
+# decision -> see results of others -> rewire || round start || decision -> ..
+
+# Counts
 
 data3 %>% filter(count_local_punish_lag >= 2) %>% tally(behavior_coop) #78
 data3 %>% filter(count_local_punish_lag >= 2) %>% tally(behavior_defect) #172
@@ -1133,127 +1877,26 @@ data3 %>% filter(count_local_punish_lag == 0) %>% tally(behavior_coop) #3632
 data3 %>% filter(count_local_punish_lag == 0) %>% tally(behavior_defect) #2869
 data3 %>% filter(count_local_punish_lag == 0) %>% tally(behavior_punish) #359
 # C: 3632/6860 = 53%, D: 42%, P: 5.2%
+
+# Proportions
+data3 %>% filter(local_rate_punish_lag >= 0.15) %>% tally(behavior_coop) #437
+data3 %>% filter(local_rate_punish_lag >= 0.15) %>% tally(behavior_defect) #728
+data3 %>% filter(local_rate_punish_lag >= 0.15) %>% tally(behavior_punish) #104
+# 34%/57%/8.2%
+
+data3 %>% filter(local_rate_punish_lag > 0 & local_rate_punish_lag < 0.15) %>% tally(behavior_coop) #426
+data3 %>% filter(local_rate_punish_lag > 0 & local_rate_punish_lag < 0.15) %>% tally(behavior_defect) #420
+data3 %>% filter(local_rate_punish_lag > 0 & local_rate_punish_lag < 0.15) %>% tally(behavior_punish) #45
+# 47.8/47.1/5.05
+
+data3 %>% filter(local_rate_punish_lag == 0) %>% tally(behavior_coop) #3632
+data3 %>% filter(local_rate_punish_lag == 0) %>% tally(behavior_defect) #2869
+data3 %>% filter(local_rate_punish_lag == 0) %>% tally(behavior_punish) #359
+# 53/42/5.23
+
+hist(data3$local_rate_punish_lag)
 ```
+
+\*\* Things to do \*\* - OR was 1.08 but in 2x2 the result was flipped. How does this happen? Because rd0 data is excluded - What is the correct threshold for the local rate? can increase the \# of categories - threshold breaks the dose-response relationship. Where does the curve go in the end?
+
 Next: how to show this in regression model?
-
-```{r}
-load("~/Documents/Projects/harming_esn/Data/nodedataHarming.rdata") 
-names(ndata)
-#ndata is the node data
-harmdata = ndata
-#making superid
-table(ndata$game)
-
-harmdata$superid = 20000 + 100 * harmdata$game + 
-  as.numeric(substr(harmdata$id,2,nchar(harmdata$id)))
-#2XXXX for the harming experiment
-
-#local_rate_coop and other detailed data
-#This will be done when we need other variables.
-#mdata2 is the link data
-load("~/Documents/Projects/harming_esn/Data/Harminglinknodedata.Rdata")
-harmlinknode = mdata2
-harmlinknode = harmlinknode[,c("superid", "round", 
-                               "cur_local_rate_coop", "n_ties")]
-names(harmlinknode)[3] = "local_rate_coop"
-names(harmlinknode)[4] = "degree"
-harmlinknode$superid = 20000 + harmlinknode$superid
-harmdata = merge(x = harmdata,
-                 y = harmlinknode,
-                 by = c("superid","round"), all=T) #10727
-names(harmdata)
-
-###a function to standardize
-standardize = function(x) {
-  mu = mean(x, na.rm = T)
-  sd = sd(x, na.rm = T) 
-  return ((x - mu)/sd)
-}
-
-###making a continuous variable of happiness
-harmdata$happ = ifelse(harmdata$satisfaction == "v_good", 2, 
-                 ifelse(harmdata$satisfaction == "good", 1, 
-                 ifelse(harmdata$satisfaction == "neutral", 0,
-                 ifelse(harmdata$satisfaction == "bad", -1, 
-                 ifelse(harmdata$satisfaction == "v_bad", -2, NA)))))
-
-###making PosWealth (when <0, 0)
-harmdata$PosWealth = ifelse(harmdata$cumulativePayoff >= 0, 
-                            harmdata$cumulativePayoff, 0)
-
-#making cPayoffS (standardized cumulative payoff, 
-#gini_wealth, and gini_wellbeing)
-HarmStandard = as.data.frame(matrix(NA, ncol = ncol(harmdata) + 3, nrow = 0))
-names(HarmStandard) = c(names(harmdata), "cPayoffS", "gini_wealth", 
-                        "gini_wellbeing")
-for (i in 0:max(harmdata$round)){   #number of rounds 
-  for (j in 1:max(harmdata$game)){ #number of games
-    temp = harmdata[(harmdata$game == j & harmdata$round == i), ]
-    temp$cPayoffS = standardize(temp$cumulativePayoff)
-    temp$gini_wealth = gini(temp$PosWealth)
-    temp$gini_wellbeing = gini(temp$happ)
-    HarmStandard = rbind(HarmStandard, temp)
-  }
-} 
-
-###Making 5 wealth categories
-HarmStandard = HarmStandard %>%
-  mutate(WealthLevel = case_when(cPayoffS < -1.5 ~ "Poorest",
-                                 cPayoffS >= -1.5 & cPayoffS < -0.5  ~ "Poorer",
-                                 cPayoffS >= -0.5 & cPayoffS < 0.5  ~ "Middle",
-                                 cPayoffS >= 0.5 & cPayoffS < 1.5  ~ "Richer",
-                                 cPayoffS >= 1.5  ~ "Richest"))
-
-#Making a 0/1 cooperation variable
-HarmStandard = HarmStandard %>%
-  mutate(coop = case_when(behavior == "C" ~ 1,behavior %in% c("D","P","") ~ 0))
-
-HarmStandard$showScore = ifelse(HarmStandard$showScore=="true",1,0)
-
-###Renaming game ID as well (1XX for Happ, 2XX for Harm)
-HarmStandard$game = 200 + HarmStandard$game
-
-###making the variable names the same over the two data
-HarmStandard = HarmStandard[,!(names(HarmStandard) == "gameNumber")]
-
-#Harm variable
-HarmStandard$harm = ifelse(HarmStandard$behavior=="P",1,0)
-
-#Other variables
-HarmStandard$age = as.numeric(unlist(HarmStandard$age))
-HarmStandard$gender = as.character(unlist(HarmStandard$gender))
-HarmStandard$behaviorTime = as.numeric(unlist(HarmStandard$behaviorTime))
-
-#Making the minimum data
-names(HarmStandard)
-HarmStandard %>% dplyr::select(game, superid, round, age, gender, showScore,
-                               initScore, payoff, cumulativePayoff, cPayoffS,
-                               WealthLevel, coop, local_rate_coop, degree, happ,
-                               harm,behaviorTime)
-data0  = HarmStandard[,c("game","superid","round","age","gender","showScore",
-                         "initScore","payoff","cumulativePayoff","cPayoffS",
-                         "WealthLevel","coop","local_rate_coop","degree",
-                         "happ","harm","behaviorTime")]
-
-#Making a lag data
-data_lag = data0[,c("superid","round",
-                    "initScore","payoff","cumulativePayoff","cPayoffS",
-                    "WealthLevel","coop","local_rate_coop","degree",
-                    "happ","harm","behaviorTime")]
-names(data_lag)[-c(1,2)] = paste0(names(data_lag)[-c(1,2)],"_lag")
-data_lag$round = data_lag$round + 1
-
-#merge
-data1 = merge(x=data0,y=data_lag,all.x=T,all.y=F,by=c("superid","round"))
-
-data1$log_behaviorTime = log10(data1$behaviorTime)
-data1$log_behaviorTime_lag = log10(data1$behaviorTime_lag)
-
-#checking for data consistency
-table(data1$coop) # difference is the blanks were not converted to not coop
-# 5104/4878
-
-summary(zelig(data = data1, coop ~ showScore + age + gender, model = "logit"))
-# showscore = -0.195
-```
-

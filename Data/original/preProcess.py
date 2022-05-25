@@ -125,10 +125,6 @@ def preProcess(filename):
         elif event == "q7":
             game.setRace(game.PID[d['pid']],d['ethnicity'])
 
-
-
-
-
         elif event == "rewiringEvent" and start:
             if d['action'] == 'breakConnection':
                 if (g.has_edge(game.PID[d['pid']], game.PID[d['nid']])):
@@ -143,8 +139,7 @@ def preProcess(filename):
             if game.PID[d['pid']] in g:
                 g.remove_node(game.PID[d['pid']])
             #game.setDropPlayers(int(d['curRound']), game.PID[d['pid']])
-
-
+            
     game.addGraph(lastRound, g.copy())
 
     return game

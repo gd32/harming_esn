@@ -141,12 +141,6 @@ class Game:
     def setQ4(self, playerId, determined, attentive, jittery, active, afraid):
         self.Players[playerId].setQ4(determined, attentive, jittery, active, afraid)
 
-
-
-
-
-
-
     def makeConnections(self, round):
         newConnections = []
         for p, C in self.MakeCandidates.items():
@@ -170,7 +164,6 @@ class Game:
             self.MakeCandidates[playerId] = []
         self.MakeCandidates[playerId].append(targetId)
         self.Players[playerId].setTryMakeLink(round, targetId, time - self.RewiringTime[round])
-
 
     def setPlayerMaintainConnection(self, round, playerId, targetId, time):
         if not self.Players.has_key(playerId): return
@@ -250,8 +243,6 @@ class Game:
                 graph.node[n]["jittery"] = self.Players[n].jittery
                 graph.node[n]["active"] = self.Players[n].active
                 graph.node[n]["afraid"] = self.Players[n].afraid
-
-
 
                 if round > 0:
                     graph.node[n]["payoff"] = self.Players[n].Payoff[round]
