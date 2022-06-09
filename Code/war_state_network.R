@@ -30,8 +30,6 @@ subseq_check <- function(x,y) grepl(toString(y),toString(x),fixed = TRUE)
 subseq_check(tmp, c("0", "0", "0", "0", "0"))
 peace_str = c("0", "0", "0", "0", "0")
 
-tmp = c(1, 2, 3, 4, 5)
-
 peace_games = NULL
 war_games = NULL
 for(i in 1:50){
@@ -73,7 +71,7 @@ pun_counts = harmdata %>%
 netdata = harmdata %>% 
   group_by(game) %>%
   select(superid, game, round, showScore, behavior_coop, behavior_defect, 
-         behavior_punish,cPayoffS, behaviorTime, degree, rate_coop, rate_rich, 
+         behavior_punish,cPayoffS, behaviorTime, degree, rate_rich, 
          local_gini, initial_coop, initial_defect, initial_punish, initial_local_gini, 
          initial_degree, happ, WealthLevel, country) %>%
   arrange(game, round, superid) %>%
@@ -186,8 +184,37 @@ round(exp(tab), digits = 3)
 pun_counts %>% arrange(-punishments) # Exclude games 22 and 46 since they have the strongest punish pattern
 
 ## Do the main regression analysis excluding those games
+load("~/Documents/Projects/harming_esn/Data/data1_cc_final.Rdata")
 
+data1_cc_tmp = data1_cc %>% filter(!(game %in% c(22, 46)))
 
+# No longer significant using punish lag categories
+m1 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + 
+             behavior_punish_lag + factor(local_rate_punish_cat4) + cPayoffS_lag + degree_lag + happ_lag + 
+             factor(round) + (1|game) + (1|superid),
+           data = data1_cc_tmp, family = binomial, nAGQ=0, 
+           control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+se = sqrt(diag(vcov(m1)))
+# table of estimates with 95% CI
+tab = cbind(Est = fixef(m1), LL = fixef(m1) - 1.96 * se, UL = fixef(m1) + 1.96 * se)
+round(exp(tab), digits = 3)[1:15,]
+
+names(data1_cc_tmp)
+
+# Significance is lost when adding the coop categories + losing the heavy punish rounds
+m2 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + factor(local_rate_coop_cat4) + 
+           behavior_punish_lag + factor(local_rate_punish_cat4) + cPayoffS_lag + degree_lag + happ_lag + 
+           factor(round) + (1|game) + (1|superid),
+           data = data1_cc_tmp, family = binomial, nAGQ=0, 
+           control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+se = sqrt(diag(vcov(m2)))
+# table of estimates with 95% CI
+tab = cbind(Est = fixef(m2), LL = fixef(m2) - 1.96 * se, UL = fixef(m2) + 1.96 * se)
+round(exp(tab), digits = 3)[1:18,]
+
+# ShowScore never becomes significant
+
+# Is there something special about those two rounds?
 
 
     

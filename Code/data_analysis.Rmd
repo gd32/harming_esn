@@ -22,6 +22,7 @@ This R Markdown document contains the data cleaning and analysis for our paper, 
 ```{r, message = F, warning = F}
 library(tidyverse) # for data management
 library(lme4) # for mixed model regression
+library(lmerTest)
 library(reldist) # to calculate gini
 library(rgeolocate) # to convert IPs to country
 library(igraph) # for network analysis
@@ -33,6 +34,7 @@ library(reshape2) # for data management
 ```{r}
 # Main data: mdata3
 load("~/Documents/Projects/harming_esn/Data/mdata3.Rdata")
+dim(mdata3)
 ```
 
 ### Set up convenience functions
@@ -157,20 +159,22 @@ data1 = data1 %>% mutate(behavior = case_when(behavior_coop == 1 ~ "C",
 
 data1[data1$superid == 2214, "age"] = NA # outlier
 
-# Adding initial centrality measures
+# Adding initial centrality measures and transitivity
 load("~/Documents/Projects/harming_esn/Data/harming_jsons/ldata4_0316X.Rdata") #ldata4
 load("~/Documents/Projects/harming_esn/Data/ndata_individual.Rdata") #ndata1
 
 cent_df = tibble(superid = NULL,
                  starting_ec = NULL,
-                 starting_dc = NULL)
+                 starting_dc = NULL,
+                 transitivity = NULL)
 for(i in 1:50){
   ndata_r0 = ndata1 %>% filter(game == i, round == 0) %>% relocate(id)
   r0_el = ldata4 %>% filter(game == i, round == 0) %>% select(id1, id2)
   g = graph_from_data_frame(r0_el, directed = T, vertices = ndata_r0)
   tmp_df = tibble(superid = 100*i+parse_number(names(eigen_centrality(g)$vector)),
                   starting_ec = eigen_centrality(g)$vector,
-                  starting_dc = degree(g))
+                  starting_dc = degree(g),
+                  transitivity = transitivity(g, type = "local"))
   cent_df = rbind(cent_df, tmp_df)
 }
 
@@ -179,36 +183,55 @@ data1 = merge(data1, cent_df, by = "superid")
 #replace NaNs (from missing lag data) with NAs
 data1[is.na(data1) == T] = NA
 
+# Data1 includes lags.
 save(data1, file = "~/Documents/Projects/harming_esn/Data/data1.Rdata")
+save(data1, file = "/Users/gdewey/Dropbox/Active-AN22HARM-NatEE/Data/data1.Rdata")
+
+load("/Users/gdewey/Dropbox/Active-AN22HARM-NatEE/Data/data1.Rdata")
+
 ```
 
 # Basic statistics about the games
 
 ```{r}
+names(mdata3)
+
 # Checking sample sizes
 dim(mdata3) #10727 recorded actions
 length(unique(mdata3$superid)) #745 unique participants
 
+# showScore
+table(mdata3$showScore)
+
 # Demographics
-demo_df = harmdata %>% filter(round == 2)
+r2df = harmdata %>% filter(round == 2)
 length(harmdata %>% filter(round == 2) %>% pull(unique(superid))) 
 #713 individuals through round 2
 
 # Age
-mean(demo_df$age, na.rm = T) #32.86 years old
+mean(harmdata$age, na.rm = T) #32.86 years
 
 # Gender
-xtabs(~gender, demo_df) # 499 provided gender, F: 206 (41%) vs M: 392 (59%)
+xtabs(~gender, r2df) # 499 provided gender, F: 206 (41%) vs M: 392 (59%)
 
 # Country
-xtabs(~country_3cat, demo_df) #408 (57%) US, 257 (36%) India, 7% Other
-length(unique(harmdata$country))
+xtabs(~country_3cat, r2df) #408 (57%) US, 257 (36%) India, 7% Other
+length(unique(harmdata$country)) #27 unique countries
 
 # Behavior time
 mean(harmdata$behaviorTime, na.rm = T) #~7870 ms
 
 # Behaviors
-xtabs(~behavior_punish + behavior_defect + behavior_coop, harmdata)
+table(harmdata$behavior_coop) #4878 coop
+table(harmdata$behavior_defect) #4336 defect
+table(harmdata$behavior_punish) #562 defect = 5.2%
+
+# cumulativePayoff
+mean(harmdata$initial_score) #486
+mean(harmdata$cumulativePayoff, na.rm =T) #1584 (so mean gain of ~ 1k units)
+
+# degree
+mean(harmdata$degree, na.rm = T) #6
 
 # How many peaceful/aggressive rounds
 peace_rounds = NULL
@@ -229,10 +252,16 @@ sum(punish_rounds) #373 rounds with at least 1 punish choice
 # Main Analyses
 
 ```{r}
-# Make the complete case dataset
-data1_cc = na.omit(data1)
-dim(data1_cc)
-# save(data1_cc, file = "~/Documents/Projects/harming_esn/Data/data1_cc.Rdata")
+# Load data for analysis
+load("~/Documents/Projects/harming_esn/Data/data1.Rdata") # full data with lags
+# Should be 10727 rows
+
+# Create data without nulls (for mixed model regressions)
+# data1_cc = data1 %>% na.omit()
+# save(data1_cc, file = "~/Documents/Projects/harming_esn/Data/data1_complete.Rdata")
+
+# Load complete case dataset
+load(file = "~/Documents/Projects/harming_esn/Data/data1_complete.Rdata") #should be 7458 rows
 ```
 
 ## Regression Models
@@ -315,7 +344,6 @@ round(exp(tab_m3tmp), digits = 3)
 Try 4 categories (0-24%, 25-49%, 50-74%, 75-100%) for cooperation to test for dose response.
 
 ```{r}
-
 data1_cc$local_rate_punish_cat4 = 
   case_when(data1_cc$local_rate_punish_lag >=0 & data1_cc$local_rate_punish_lag <= 0.05 ~ 0,
             data1_cc$local_rate_punish_lag >0.05 & data1_cc$local_rate_punish_lag <= 0.1 ~ 1,
@@ -337,14 +365,13 @@ round(addmargins(prop.table(xtabs(~local_rate_coop_cat4 + behavior_punish, data1
 round(addmargins(prop.table(xtabs(~local_rate_coop_cat4, data1_cc))), digits = 3)
 round(addmargins(prop.table(xtabs(~local_rate_punish_cat4, data1_cc))), digits = 3)
 
-
+save(data1_cc, file = "~/Documents/Projects/harming_esn/Data/data1_cc_final.Rdata")
 ```
+### Model 6:  With both rate variables as categorical 
 
 ```{r}
-m3_cat4 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + factor(local_rate_punish_cat4) + cPayoffS_lag + degree_lag + happ_lag + factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
-
-summary(m3_cat4)
-
+load("~/Documents/Projects/harming_esn/Data/data1_cc_final.Rdata")
+m3_cat4 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + factor(local_rate_coop_cat4) + behavior_punish_lag + factor(local_rate_punish_cat4) + cPayoffS_lag + degree_lag + happ + happ_lag + factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 se = sqrt(diag(vcov(m3_cat4)))
 # table of estimates with 95% CI
 tab_m3_cat4 = cbind(Est = fixef(m3_cat4), LL = fixef(m3_cat4) - 1.96 * se, UL = fixef(m3_cat4) + 1.96 * se)
@@ -367,6 +394,7 @@ se = sqrt(diag(vcov(m4)))
 tab = cbind(Est = fixef(m4), LL = fixef(m4) - 1.96 * se, UL = fixef(m4) + 1.96 * se)
 round(exp(tab), digits = 3)[1:6,]
 ```
+
 ```{r}
 m5 = glmer(behavior_punish ~ factor(local_rate_coop_cat4) + factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 se = sqrt(diag(vcov(m5)))
@@ -374,6 +402,7 @@ se = sqrt(diag(vcov(m5)))
 tab = cbind(Est = fixef(m5), LL = fixef(m5) - 1.96 * se, UL = fixef(m5) + 1.96 * se)
 round(exp(tab), digits = 3)[1:6,]
 ```
+
 ## Variable selection approach: which variable makes category 5 of punishment rate non-significant?
 
 ```{r}
@@ -1143,7 +1172,7 @@ t.test(coop_times, non_coop_times, var.equal = F) # no different in time based o
 
     Decision of others in t-1 vs. index individual decision at t
 
-## Does longer thinking time stop attacks?
+# Assessing decision time
 
 Seems like more deliberation -> higher chance of attack. Less change in terms of rate of cooperation
 
@@ -1190,6 +1219,23 @@ summary(data1[is.na(data1$behaviorTime)==0 & data1$behaviorTime>=5000 & data1$be
 summary(data1[is.na(data1$behaviorTime)==0 & data1$behaviorTime>=9000 & data1$behaviorTime<1000000,]$behavior_punish)
 #0.079
 ```
+## Regression models for decision time
+
+### Model 7: Decision Time full model
+
+
+```{r}
+m7 = lmer(log_behaviorTime ~ showScore + age + gender + behavior_coop_lag + factor(local_rate_coop_cat4) + behavior_punish_lag + factor(local_rate_punish_cat4) + cPayoffS_lag + degree_lag + happ + happ_lag + factor(round) + (1|game) + (1|superid), data = data1_cc)
+summary(m7)
+# se = sqrt(diag(vcov(m7)))
+# # table of estimates with 95% CI
+# tab = cbind(Est = fixef(m7), LL = fixef(m7) - 1.96 * se, UL = fixef(m7) + 1.96 * se)
+# round(exp(tab), digits = 3)[1:19,]
+```
+
+right specification?
+
+significant variables: showScore, local_coop_rate (high tiers), local_punish_rate (highest tier)
 
 ## What factors stop consecutive attacks?
 
