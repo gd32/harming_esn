@@ -54,7 +54,6 @@ for(i in peace_games){
 }
 names(punish_counts) = as.character(peace_games)
 punish_counts = as.data.frame(punish_counts)
-punish_counts
 punish_counts %>%
   rownames_to_column() %>%
   gather(colname, value, -rowname) %>%
@@ -67,6 +66,24 @@ pun_counts = harmdata %>%
   group_by(game) %>%
   tally(behavior_punish) %>%
   rename(punishments = n)
+
+coop_df = harmdata %>%
+  group_by(game) %>%
+  tally(behavior_coop) %>%
+  rename(coop = n) 
+
+defect_df = harmdata %>%
+  group_by(game) %>%
+  tally(behavior_defect) %>%
+  rename(defects = n) 
+
+count_df = left_join(pun_counts, coop_df, by = "game") %>%
+  left_join(defect_df, by = "game")
+
+visible_df = harmdata %>%
+  group_by(game) %>%
+  tally(showScore) %>%
+  rename(wealth_visible = n)
 
 netdata = harmdata %>% 
   group_by(game) %>%
@@ -132,8 +149,6 @@ round_outcomes = harmdata %>%
   tally(behavior_punish) %>%
   mutate(peace_round = ifelse(n == 0, 1, 0))
 
-table(round_outcomes$peace_round)
-
 mean1 = function(x) {mean(x,na.rm=TRUE)} 
 
 names(tmp)
@@ -184,7 +199,7 @@ round(exp(tab), digits = 3)
 pun_counts %>% arrange(-punishments) # Exclude games 22 and 46 since they have the strongest punish pattern
 
 ## Do the main regression analysis excluding those games
-load("~/Documents/Projects/harming_esn/Data/data1_cc_final.Rdata")
+load("~/Documents/Projects/harming_esn/Data/data1_complete.Rdata")
 
 data1_cc_tmp = data1_cc %>% filter(!(game %in% c(22, 46)))
 
@@ -216,5 +231,139 @@ round(exp(tab), digits = 3)[1:18,]
 
 # Is there something special about those two rounds?
 
+# Could you also make a two by two table of #punishments and non-punishment (c and d) between inv and vis over the final 5 rounds? And simple testing?
 
-    
+pun_df_last5 = harmdata %>%
+  group_by(game) %>%  
+  filter(round %in% 11:15) %>%
+  tally(behavior_punish) %>%
+  rename(punish = n)
+
+coop_df_last5 = harmdata %>%
+  group_by(game) %>%
+  filter(round %in% 11:15) %>%
+  tally(behavior_coop) %>%
+  rename(coop = n) 
+
+defect_df_last5 = harmdata %>%
+  group_by(game) %>%
+  filter(round %in% 11:15) %>%
+  tally(behavior_defect) %>%
+  rename(defects = n) 
+
+count_df_last5 = left_join(pun_df_last5, coop_df_last5, by = "game") %>%
+  left_join(defect_df_last5, by = "game")
+
+visible_df = harmdata %>% group_by(game) %>% count(showScore) %>%
+  select(game, showScore) %>%
+  rename(vis = showScore)
+
+count_df_last5_final = count_df_last5 %>% 
+  left_join(visible_df, by = "game") %>%
+  mutate(non_punish = coop+defects)
+
+test_df = count_df_last5_final %>%
+  group_by(vis) %>%
+  summarize(total_pun = sum(punish),
+            total_non_pun = sum(non_punish))
+test_df2 = test_df %>% column_to_rownames(var = "vis") 
+test_df2
+chisq.test(test_df2)
+
+# Could you also make the 50x5 table: 50 for 50 games (1-25: vis, 26-50: inv) x rounds 11-15. Each cell contains #punishments
+tmp1 = harmdata %>%  
+  filter(round %in% 11:15) %>%
+  group_by(game, round) %>%
+  tally(behavior_punish) %>%
+  rename(punish = n)
+
+tmp2 = harmdata %>%
+  filter(round %in% 11:15) %>%
+  group_by(game, round) %>%
+  tally(behavior_coop) %>%
+  rename(coop = n) 
+
+tmp3 = harmdata %>%
+  filter(round %in% 11:15) %>%
+  group_by(game, round) %>%
+  tally(behavior_defect) %>%
+  rename(defects = n) 
+
+tmp_big = left_join(tmp1, tmp2, by = c("game", "round")) %>%
+  left_join(tmp3, by = c("game", "round")) %>%
+  left_join(visible_df, by = "game")
+
+tmp4 = tmp_big %>% group_by(game, round) %>% summarize(n_punish = sum(punish)) %>%
+  left_join(visible_df, by = "game")
+
+tmp5 = tmp4 %>%
+  group_by(game, round) %>%
+  summarize(n_punish = sum(n_punish)) 
+
+tmp6 = as.data.frame(t(tmp5 %>% spread(key = game, value = n_punish)))
+
+names(tmp6) = c("11", "12", "13", "14", "15")
+tmp7 = tmp6 %>% rownames_to_column(var = "game") %>%
+  filter(game != "round") %>%
+  mutate(game = as.numeric(game)) %>%
+  left_join(visible_df, by = "game")
+
+tmp8 = tmp7 %>% select(-"15") %>%
+  filter(game %in% 1:25)
+colSums(tmp8 == 0)
+#14+14+16+17 (61)
+
+tmp9 = tmp7 %>% select(-"15") %>%
+  filter(game %in% 26:50)
+colSums(tmp9 == 0)
+view(tmp9)
+#11+12+17+14 (66)
+
+# Testing for the difference between visible and invisible conditions
+# - limit the data to rounds where the previous round has no punishment
+round_outcomes = data1_cc %>%
+  arrange(superid, game, round) %>%
+  group_by(game, round) %>%
+  tally(behavior_punish) %>%
+  mutate(peace_round = ifelse(n == 0, 1, 0))
+peace_rds = round_outcomes %>% filter(peace_round == 1, round %in% 1:14) %>% select(game, round)
+peace_rds = peace_rds %>% mutate(peace_rds_str = 1000+as.numeric(paste0(game, round)))
+peace_rds
+
+round_outcomes %>% filter(game == 3, round == 13)
+peace_rds %>% filter(peace_rds_str == 1313)
+data1_cc %>% filter(game == 3, round == 14)
+data1_cc2 %>% filter(game == 3, round == 13)
+
+data1_cc2 %>% filter(game_round_str %in% peace_rds$peace_rds_str)
+
+data1_cc2 = data1_cc %>% mutate(round_lag = round - 1,
+                                game_round_str = 1000+as.numeric(paste0(as.character(game), as.character(round_lag))))
+
+data1_cc2
+# data1_cc3 only include obs from game rounds where previous round has no punishment
+data1_cc3 = data1_cc2 %>% filter(game_round_str %in% peace_rds$peace_rds_str & behavior_punish_lag == 0 & local_rate_punish_lag == 0)
+
+# crude model with showScore only
+m4 = glmer(behavior_punish ~ showScore + factor(round) + (1|game) + (1|superid),
+                data = data1_cc3, family = binomial, nAGQ=0, 
+                control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+se = sqrt(diag(vcov(m4)))
+# table of estimates with 95% CI
+tab = cbind(Est = fixef(m4), LL = fixef(m4) - 1.96 * se, UL = fixef(m4) + 1.96 * se)
+round(exp(tab), digits = 3)[1:2,]
+
+# full model
+m5 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + 
+             behavior_punish_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + 
+             factor(round) + (1|game) + (1|superid),
+           data = data1_cc3, family = binomial, nAGQ=0, 
+           control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+se = sqrt(diag(vcov(m5)))
+# table of estimates with 95% CI
+tab = cbind(Est = fixef(m5), LL = fixef(m5) - 1.96 * se, UL = fixef(m5) + 1.96 * se)
+round(exp(tab), digits = 3)[1:9,]
+
+
+
+

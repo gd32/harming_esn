@@ -39,10 +39,9 @@ names(ndata_wide3)[23:31] = c("make1", "make2", "make3", "make4", "make5",
                               "make6", "make7", "make8", "make9")
 
 
-write.csv(ndata_wide3, "~/Documents/Projects/harming_esn/Data/ndata_wide_rewiring.csv", row.names = F)
+# write.csv(ndata_wide3, "~/Documents/Projects/harming_esn/Data/ndata_wide_rewiring.csv", row.names = F)
 
-# ndata_wide3 = read_csv("~/Documents/Projects/harming_esn/Data/ndata_wide_rewiring.csv")
-
+ndata_wide3 = read_csv("~/Documents/Projects/harming_esn/Data/ndata_wide_rewiring.csv")
 #### Data management for rewiring analysis ####
 
 ndata_final = ndata_wide3 %>%

@@ -22,7 +22,7 @@ This R Markdown document contains the data cleaning and analysis for our paper, 
 ```{r, message = F, warning = F}
 library(tidyverse) # for data management
 library(lme4) # for mixed model regression
-library(lmerTest)
+library(lmerTest) # for p-values in regression output
 library(reldist) # to calculate gini
 library(rgeolocate) # to convert IPs to country
 library(igraph) # for network analysis
@@ -372,6 +372,24 @@ save(data1_cc, file = "~/Documents/Projects/harming_esn/Data/data1_cc_final.Rdat
 ```{r}
 load("~/Documents/Projects/harming_esn/Data/data1_cc_final.Rdata")
 m3_cat4 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + factor(local_rate_coop_cat4) + behavior_punish_lag + factor(local_rate_punish_cat4) + cPayoffS_lag + degree_lag + happ + happ_lag + factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+se = sqrt(diag(vcov(m3_cat4)))
+# table of estimates with 95% CI
+tab_m3_cat4 = cbind(Est = fixef(m3_cat4), LL = fixef(m3_cat4) - 1.96 * se, UL = fixef(m3_cat4) + 1.96 * se)
+round(exp(tab_m3_cat4), digits = 3)[1:19,]
+```
+#### Model 6.1: Using cooperation as the outcome
+
+```{r}
+m3_cat4 = glmer(behavior_coop ~ showScore + age + gender + behavior_coop_lag + factor(local_rate_coop_cat4) + behavior_punish_lag + factor(local_rate_punish_cat4) + cPayoffS_lag + degree_lag + happ + happ_lag + factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+se = sqrt(diag(vcov(m3_cat4)))
+# table of estimates with 95% CI
+tab_m3_cat4 = cbind(Est = fixef(m3_cat4), LL = fixef(m3_cat4) - 1.96 * se, UL = fixef(m3_cat4) + 1.96 * se)
+round(exp(tab_m3_cat4), digits = 3)[1:19,]
+```
+#### Model 6.2: Using defection as the outcome
+
+```{r}
+m3_cat4 = glmer(behavior_defect ~ showScore + age + gender + behavior_defect_lag + factor(local_rate_coop_cat4) + behavior_punish_lag + factor(local_rate_punish_cat4) + cPayoffS_lag + degree_lag + happ + happ_lag + factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 se = sqrt(diag(vcov(m3_cat4)))
 # table of estimates with 95% CI
 tab_m3_cat4 = cbind(Est = fixef(m3_cat4), LL = fixef(m3_cat4) - 1.96 * se, UL = fixef(m3_cat4) + 1.96 * se)
@@ -1312,6 +1330,8 @@ How to visualize this? Network visualization? 2D visual of progress showing each
 Add a lag 2 set of variables
 
 Interaction between lag1 and lag2
+
+## Network analysis
 
 ```{r}
 load("~/Documents/Projects/harming_esn/Data/harming_jsons/ldata4_0316X.Rdata") #ldata4
