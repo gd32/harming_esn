@@ -1,8 +1,19 @@
 #### Network Analysis for Peace
 
 ## We define peace as having no punishment in at least 5 (or 3?) consecutive rounds
+# Factors we think are relevant
+# main - wealth visibility (there is a difference, albeit at the N=50 (network) level)
+# the number of punishments (cumulative)
+# try - the number of punishments in rounds 5-10
+# the number of defections? 
+# try - the number of defections in rounds 5-10
+# can also try the number of coops
+# the number of people with long sequences of C? (i.e. 3+ C in a row)
+# the number of people with long sequences of P?
 
 #### Part 1 - Game level analysis ####
+
+rm(list = ls())
 
 library(tidyverse)
 library(lme4)
@@ -41,10 +52,8 @@ for(i in 1:50){
     war_games = c(war_games, i)
   }
 }
-
+# 1 5 7 8 9 13 14 15 16 20 26 28 37 45
 length(peace_games) #14 games had peace (last 5 rounds had no punishment)
-
-harmdata %>% filter(game == 14, round != 0) %>% group_by(round) %>% tally(behavior_punish)
 
 punish_counts = NULL
 for(i in peace_games){
@@ -53,6 +62,7 @@ for(i in peace_games){
   punish_counts = cbind(punish_counts, tmp)
 }
 names(punish_counts) = as.character(peace_games)
+
 punish_counts = as.data.frame(punish_counts)
 punish_counts %>%
   rownames_to_column() %>%
@@ -61,19 +71,22 @@ punish_counts %>%
   geom_tile() +
   xlab("Round") + ylab("Game ID")
 
-# get the number of punishments per game
+# get the number of punishments per game excluding the last 5 rounds
 pun_counts = harmdata %>% 
   group_by(game) %>%
+  filter(round %in% 1:10) %>%
   tally(behavior_punish) %>%
   rename(punishments = n)
 
 coop_df = harmdata %>%
   group_by(game) %>%
+  filter(round %in% 1:10) %>%
   tally(behavior_coop) %>%
   rename(coop = n) 
 
 defect_df = harmdata %>%
   group_by(game) %>%
+  filter(round %in% 1:10) %>%
   tally(behavior_defect) %>%
   rename(defects = n) 
 
@@ -104,29 +117,54 @@ netdata = harmdata %>%
             mean_gini = mean(initial_local_gini, na.rm = T),
             peace_game = mean(peace_game))
 
-netdata1 = left_join(netdata, pun_counts, by = "game")
+netdata1 = left_join(netdata, count_df, by = "game")
+netdata2 = netdata1 %>% left_join(count_df, by = "game")
+
 
 #### Regression models ####
 ## Using binary peace status as the outcome
-m0 = glm(peace_game ~ showScore, data = netdata)
+m0 = glm(peace_game ~ showScore, data = netdata1, family = "binomial")
 summary(m0)
+netdata1
 
-m1 = glm(peace_game ~ showScore + mean_deg +  mean_init_deg + prop_punish + prop_coop + init_punish + init_coop + mean_gini, data = netdata)
+m1 = glm(peace_game ~ showScore + punishments + coop + defects, data = netdata1, family = "binomial")
 summary(m1)
 
-m2 = glm(peace_game ~ showScore + mean_gini + mean_init_deg, data = netdata)
+m1.1 = glm(peace_game ~ showScore + punishments, data = netdata1, family = "binomial")
+summary(m1.1)
+
+m1.2 = glm(peace_game ~ showScore + coop, data = netdata1, family = "binomial")
+summary(m1.2)
+
+m1.3 = glm(peace_game ~ showScore + defects, data = netdata1, family = "binomial")
+summary(m1.3)
+
+m2 = glm(peace_game ~ showScore + punishments + coop + defects + mean_deg + mean_gini +
+           init_coop + init_punish, data = netdata1,
+         family = "binomial")
 summary(m2)
 
-xtabs(~peace_game + showScore, netdata)
-
-## Using the number of non-peace rounds as the outcome
-m3 = lm(punishments ~ showScore, data = netdata1)
+m3 = glm(peace_game ~ showScore + mean_gini + mean_init_deg, data = netdata1)
 summary(m3)
 
-m4 = lm(punishments ~ showScore + mean_gini + mean_init_deg, data = netdata1)
+m4 = glm(peace_game ~ showScore + punishments + coop + defects + mean_deg + mean_gini,
+         data  = netdata1, family = "binomial")
 summary(m4)
 
-m5 = lm(punishments ~ showScore + mean_deg +  mean_init_deg + 
+m4.1 = glm(peace_game ~ showScore + punishments + defects + mean_deg + mean_gini,
+         data  = netdata1, family = "binomial")
+summary(m4.1)
+
+## Using the number of non-peace rounds as the outcome
+m5 = lm(punishments ~ showScore, data = netdata1)
+summary(m5)
+
+m6 = lm(punishments ~ showScore + mean_gini + mean_init_deg, data = netdata1)
+summary(m6)
+
+m7 = glm(punishments ~ showScore + mean_deg + mean_init_deg + init_punish + init_coop, data = netdata1)
+
+m8 = lm(punishments ~ showScore + mean_deg +  mean_init_deg + 
          prop_punish + prop_coop + init_punish + init_coop + mean_gini, 
        data = netdata1)
 summary(m5)
@@ -199,7 +237,63 @@ round(exp(tab), digits = 3)
 pun_counts %>% arrange(-punishments) # Exclude games 22 and 46 since they have the strongest punish pattern
 
 ## Do the main regression analysis excluding those games
-load("~/Documents/Projects/harming_esn/Data/data1_complete.Rdata")
+rm(list = ls())
+load("~/Documents/Projects/harming_esn/Data/data1.Rdata")
+
+data1$local_rate_punish_cat4 = 
+  case_when(data1$local_rate_punish_lag >=0 & data1$local_rate_punish_lag <= 0.05 ~ 0,
+            data1$local_rate_punish_lag >0.05 & data1$local_rate_punish_lag <= 0.1 ~ 1,
+            data1$local_rate_punish_lag > 0.1 & data1$local_rate_punish_lag <= 0.15 ~ 2,
+            data1$local_rate_punish_lag > 0.15 & data1$local_rate_punish_lag <= 0.2 ~ 3,
+            data1$local_rate_punish_lag > 0.2 & data1$local_rate_punish_lag <= 0.25 ~ 4,
+            data1$local_rate_punish_lag > 0.25 ~ 5)
+
+data1$local_rate_coop_cat4 = 
+  case_when(data1$local_rate_coop_lag > 0 & data1$local_rate_coop_lag <= 0.3 ~ 4,
+            data1$local_rate_coop_lag > 0.3 & data1$local_rate_coop_lag <= 0.5 ~ 3,
+            data1$local_rate_coop_lag > 0.5 & data1$local_rate_coop_lag <= 0.7 ~ 2,
+            data1$local_rate_coop_lag > 0.7 & data1$local_rate_coop_lag <= 0.9 ~ 1,
+            data1$local_rate_coop_lag > 0.9 ~ 0)
+
+
+# create a cumulative counter of behaviors
+names(data1)
+
+tmp = data1 %>%
+  group_by(superid, game, round) %>%
+  select(superid, game, round, behavior_punish, behavior_defect, behavior_coop)
+
+cum_data1 = tmp %>%
+  ungroup() %>%
+  group_by(superid, game, behavior_punish) %>%
+  mutate(punish = ifelse(behavior_punish == 0, NA, 1),
+         coop = ifelse(behavior_coop == 0, NA, 1),
+         defect = ifelse(behavior_coop == 0 , NA, 1)) %>%
+  mutate(cumulative_punish = row_number(punish),
+         cumulative_coop = row_number(coop),
+         cumulative_defect = row_number(defect)) %>%
+  mutate(cumulative_punish = ifelse(is.na(cumulative_punish) == T, 0, cumulative_punish),
+         cumulative_coop = ifelse(is.na(cumulative_coop) == T, 0, cumulative_coop),
+         cumulative_defect = ifelse(is.na(cumulative_defect) == T, 0, cumulative_defect)) %>%
+  select(superid, game, round, starts_with("cum"))
+
+data2 = left_join(data1, cum_data1, by = c("superid", "game", "round")) %>% select(-behavior_punish.y) %>%
+  rename(behavior_punish = behavior_punish.x)
+
+m1 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + 
+             behavior_punish_lag + factor(local_rate_punish_cat4) + cPayoffS_lag + degree_lag + happ_lag + 
+             cumulative_punish + cumulative_coop + cumulative_defect +
+             factor(round) + (1|game) + (1|superid),
+           data = data2, family = binomial, nAGQ=0, 
+           control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+se = sqrt(diag(vcov(m1)))
+# table of estimates with 95% CI
+tab = cbind(Est = fixef(m1), LL = fixef(m1) - 1.96 * se, UL = fixef(m1) + 1.96 * se)
+round(exp(tab), digits = 3)[1:15,]
+
+
+
+
 
 data1_cc_tmp = data1_cc %>% filter(!(game %in% c(22, 46)))
 

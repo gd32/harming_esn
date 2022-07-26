@@ -146,18 +146,27 @@ data1 = merge(x=data0,y=data_lag_long,all.x=T,all.y=F,by=c("superid","round"))
 data1$log_behaviorTime = log10(data1$behaviorTime)
 data1$log_behaviorTime_lag = log10(data1$behaviorTime_lag)
 
-# Create categorical behavior
-data1 = data1 %>% mutate(behavior = case_when(behavior_coop == 1 ~ "C",
-                                      behavior_defect == 1 ~ "D",
-                                      behavior_punish == 1 ~ "P"),
-                 behavior_lag = case_when(behavior_coop_lag == 1 ~ "C",
-                                          behavior_defect_lag ==1 ~ "D",
-                                          behavior_punish_lag == 1 ~ "P"),
-                 behavior_lag2 = case_when(behavior_coop_lag2 == 1 ~ "C",
-                                           behavior_defect_lag2 == 1 ~ "D",
-                                           behavior_punish_lag2 == 1 ~ "P"))
-
 data1[data1$superid == 2214, "age"] = NA # outlier
+
+tmp = data1 %>%
+  group_by(superid, game, round) %>%
+  select(superid, game, round, behavior_punish, behavior_defect, behavior_coop)
+
+cum_data1 = tmp %>%
+  ungroup() %>%
+  group_by(superid, game) %>%
+  mutate(punish = ifelse(behavior_punish == 0, NA, 1),
+         coop = ifelse(behavior_coop == 0, NA, 1),
+         defect = ifelse(behavior_coop == 0 , NA, 1)) %>%
+  mutate(cumulative_punish = row_number(punish),
+         cumulative_coop = row_number(coop),
+         cumulative_defect = row_number(defect)) %>%
+  mutate(cumulative_punish = ifelse(is.na(cumulative_punish) == T, 0, cumulative_punish),
+         cumulative_coop = ifelse(is.na(cumulative_coop) == T, 0, cumulative_coop),
+         cumulative_defect = ifelse(is.na(cumulative_defect) == T, 0, cumulative_defect)) %>%
+  select(superid, game, round, starts_with("cum"))
+
+data1 = merge(x=data1,y=cum_data1,all.x=T,all.y=F,by=c("superid","round","game"))
 
 # Adding initial centrality measures and transitivity
 load("~/Documents/Projects/harming_esn/Data/harming_jsons/ldata4_0316X.Rdata") #ldata4
@@ -187,8 +196,39 @@ data1[is.na(data1) == T] = NA
 save(data1, file = "~/Documents/Projects/harming_esn/Data/data1.Rdata")
 save(data1, file = "/Users/gdewey/Dropbox/Active-AN22HARM-NatEE/Data/data1.Rdata")
 
-load("/Users/gdewey/Dropbox/Active-AN22HARM-NatEE/Data/data1.Rdata")
+data1_cc = data1 %>% na.omit()
 
+# Create categorical behavior
+data1_cc = data1_cc %>% mutate(behavior = case_when(behavior_coop == 1 ~ "C",
+                                      behavior_defect == 1 ~ "D",
+                                      behavior_punish == 1 ~ "P"),
+                 behavior_lag = case_when(behavior_coop_lag == 1 ~ "C",
+                                          behavior_defect_lag ==1 ~ "D",
+                                          behavior_punish_lag == 1 ~ "P"),
+                 behavior_lag2 = case_when(behavior_coop_lag2 == 1 ~ "C",
+                                           behavior_defect_lag2 == 1 ~ "D",
+                                            behavior_punish_lag2 == 1 ~ "P"))
+
+data1_cc$local_rate_punish_cat4 = 
+  case_when(data1_cc$local_rate_punish_lag >=0 & data1_cc$local_rate_punish_lag <= 0.05 ~ 0,
+            data1_cc$local_rate_punish_lag >0.05 & data1_cc$local_rate_punish_lag <= 0.1 ~ 1,
+            data1_cc$local_rate_punish_lag > 0.1 & data1_cc$local_rate_punish_lag <= 0.15 ~ 2,
+            data1_cc$local_rate_punish_lag > 0.15 & data1_cc$local_rate_punish_lag <= 0.2 ~ 3,
+            data1_cc$local_rate_punish_lag > 0.2 & data1_cc$local_rate_punish_lag <= 0.25 ~ 4,
+            data1_cc$local_rate_punish_lag > 0.25 ~ 5)
+
+data1_cc$local_rate_coop_cat4 = 
+  case_when(data1_cc$local_rate_coop_lag > 0 & data1_cc$local_rate_coop_lag <= 0.3 ~ 4,
+            data1_cc$local_rate_coop_lag > 0.3 & data1_cc$local_rate_coop_lag <= 0.5 ~ 3,
+            data1_cc$local_rate_coop_lag > 0.5 & data1_cc$local_rate_coop_lag <= 0.7 ~ 2,
+            data1_cc$local_rate_coop_lag > 0.7 & data1_cc$local_rate_coop_lag <= 0.9 ~ 1,
+            data1_cc$local_rate_coop_lag > 0.9 ~ 0)
+
+round(addmargins(prop.table(xtabs(~local_rate_coop_cat4 + behavior_punish, data1_cc))), digits = 3)
+# round(addmargins(prop.table(xtabs(~local_rate_coop_cat4, data1_cc))), digits = 3)
+# round(addmargins(prop.table(xtabs(~local_rate_punish_cat4, data1_cc))), digits = 3)
+
+save(data1_cc, file = "~/Documents/Projects/harming_esn/Data/data1_complete.Rdata")
 ```
 
 # Basic statistics about the games
@@ -254,14 +294,13 @@ sum(punish_rounds) #373 rounds with at least 1 punish choice
 ```{r}
 # Load data for analysis
 load("~/Documents/Projects/harming_esn/Data/data1.Rdata") # full data with lags
-# Should be 10727 rows
-
-# Create data without nulls (for mixed model regressions)
-# data1_cc = data1 %>% na.omit()
-# save(data1_cc, file = "~/Documents/Projects/harming_esn/Data/data1_complete.Rdata")
 
 # Load complete case dataset
-load(file = "~/Documents/Projects/harming_esn/Data/data1_complete.Rdata") #should be 7458 rows
+load(file = "~/Documents/Projects/harming_esn/Data/data1_complete.Rdata") 
+dim(data1_cc) #should be 7458 rows
+
+# Load
+load(file = "~/Documents/Projects/harming_esn/Data/data1_cc_final.Rdata")
 ```
 
 ## Regression Models
@@ -292,6 +331,8 @@ round(exp(tab_m2), digits = 3)[1:12,]
 ### Model 3: Ignoring behavior time
 
 ```{r}
+xtabs(~cumulative_defect, data1_cc)
+
 m3 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag+ factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 se = sqrt(diag(vcov(m3)))
 # table of estimates with 95% CI
@@ -302,16 +343,21 @@ round(exp(tab_m3), digits = 3)[1:11,]
 ### Model 4: Treating local punish rate from the previous round as categorical
 
 ```{r}
-data1_cc$local_rate_punish_cat = case_when(data1_cc$local_rate_punish_lag == 0 ~ 0,
-                                          data1_cc$local_rate_punish_lag > 0 & data1_cc$local_rate_punish_lag <= 0.15 ~ 1,
-                                          data1_cc$local_rate_punish_lag > 0.15 ~ 2)
-
 m3_cat = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + factor(local_rate_punish_cat) +  cPayoffS_lag + degree_lag + happ_lag + factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 se = sqrt(diag(vcov(m3_cat)))
 # table of estimates with 95% CI
 tab_m3cat = cbind(Est = fixef(m3_cat), LL = fixef(m3_cat) - 1.96 * se, UL = fixef(m3_cat) + 1.96 * se)
 round(exp(tab_m3cat), digits = 3)[1:12,]
 ```
+```{r}
+m3.5 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + factor(local_rate_punish_cat) +  cPayoffS_lag + degree_lag + happ_lag + factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+se = sqrt(diag(vcov(m3_cat)))
+# table of estimates with 95% CI
+tab_m3cat = cbind(Est = fixef(m3_cat), LL = fixef(m3_cat) - 1.96 * se, UL = fixef(m3_cat) + 1.96 * se)
+round(exp(tab_m3cat), digits = 3)[1:12,]
+```
+
+
 ```{r}
 m3_tmp = glmer(behavior_punish ~ showScore + factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 se = sqrt(diag(vcov(m3_tmp)))
@@ -343,34 +389,9 @@ round(exp(tab_m3tmp), digits = 3)
 
 Try 4 categories (0-24%, 25-49%, 50-74%, 75-100%) for cooperation to test for dose response.
 
-```{r}
-data1_cc$local_rate_punish_cat4 = 
-  case_when(data1_cc$local_rate_punish_lag >=0 & data1_cc$local_rate_punish_lag <= 0.05 ~ 0,
-            data1_cc$local_rate_punish_lag >0.05 & data1_cc$local_rate_punish_lag <= 0.1 ~ 1,
-            data1_cc$local_rate_punish_lag > 0.1 & data1_cc$local_rate_punish_lag <= 0.15 ~ 2,
-            data1_cc$local_rate_punish_lag > 0.15 & data1_cc$local_rate_punish_lag <= 0.2 ~ 3,
-            data1_cc$local_rate_punish_lag > 0.2 & data1_cc$local_rate_punish_lag <= 0.25 ~ 4,
-            data1_cc$local_rate_punish_lag > 0.25 ~ 5)
-
-hist(data1_cc$local_rate_coop)
-
-data1_cc$local_rate_coop_cat4 = 
-  case_when(data1_cc$local_rate_coop_lag > 0 & data1_cc$local_rate_coop_lag <= 0.3 ~ 4,
-            data1_cc$local_rate_coop_lag > 0.3 & data1_cc$local_rate_coop_lag <= 0.5 ~ 3,
-            data1_cc$local_rate_coop_lag > 0.5 & data1_cc$local_rate_coop_lag <= 0.7 ~ 2,
-            data1_cc$local_rate_coop_lag > 0.7 & data1_cc$local_rate_coop_lag <= 0.9 ~ 1,
-            data1_cc$local_rate_coop_lag > 0.9 ~ 0)
-
-round(addmargins(prop.table(xtabs(~local_rate_coop_cat4 + behavior_punish, data1_cc))), digits = 3)
-round(addmargins(prop.table(xtabs(~local_rate_coop_cat4, data1_cc))), digits = 3)
-round(addmargins(prop.table(xtabs(~local_rate_punish_cat4, data1_cc))), digits = 3)
-
-save(data1_cc, file = "~/Documents/Projects/harming_esn/Data/data1_cc_final.Rdata")
-```
 ### Model 6:  With both rate variables as categorical 
 
 ```{r}
-load("~/Documents/Projects/harming_esn/Data/data1_cc_final.Rdata")
 m3_cat4 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + factor(local_rate_coop_cat4) + behavior_punish_lag + factor(local_rate_punish_cat4) + cPayoffS_lag + degree_lag + happ + happ_lag + factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 se = sqrt(diag(vcov(m3_cat4)))
 # table of estimates with 95% CI
@@ -386,6 +407,7 @@ se = sqrt(diag(vcov(m3_cat4)))
 tab_m3_cat4 = cbind(Est = fixef(m3_cat4), LL = fixef(m3_cat4) - 1.96 * se, UL = fixef(m3_cat4) + 1.96 * se)
 round(exp(tab_m3_cat4), digits = 3)[1:19,]
 ```
+
 #### Model 6.2: Using defection as the outcome
 
 ```{r}
