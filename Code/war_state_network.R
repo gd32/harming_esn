@@ -4,6 +4,14 @@
 # Factors we think are relevant
 # main - wealth visibility (there is a difference, albeit at the N=50 (network) level)
 # the number of punishments (cumulative)
+
+
+# Feature selection for factors contributing to peace
+# Want features that apply on both the individual and network level
+
+# FEATURES ALREADY IN THE NETWORK MODEL
+# 
+
 # try - the number of punishments in rounds 5-10
 # the number of defections? 
 # try - the number of defections in rounds 5-10
@@ -17,9 +25,39 @@ rm(list = ls())
 
 library(tidyverse)
 library(lme4)
+library(magrittr)
+library(igraph)
 
 # Load data
 load("~/Documents/Projects/harming_esn/Data/harmdata.Rdata") #harmdata
+load("~/Documents/Projects/harming_esn/Data/harming_jsons/ldata4_0316X.Rdata") #ldata4
+load("~/Documents/Projects/harming_esn/Data/ndata_individual.Rdata") #ndata1
+load("~/Documents/Projects/harming_esn/Data/data1.Rdata") #data1
+
+# Comparing local rate of punishment and # of punishers
+data1 %>% 
+  mutate(behavior = case_when(behavior_coop == 1 ~ "C",
+                              behavior_defect == 1 ~ "D",
+                              behavior_punish == 1 ~ "P"),
+         behavior_numeric = case_when(behavior == "C" ~ 1, 
+                                      behavior == "D" ~ 2,
+                                      behavior == "P" ~ 3)) %>%
+  group_by(game, round) %>%
+  arrange(game, round) %>%
+  select(local_rate_punish_lag, behavior_punish_lag) %>%
+  summarize(mean_local_rate = mean(local_rate_punish_lag), 
+            total_punish_lag = sum(behavior_punish_lag)) %>%
+  filter(is.na(mean_local_rate) == F) %>%
+  ggplot() +
+  geom_point(aes(x= mean_local_rate, y = total_punish_lag))
+
+data2 = data1 %>% mutate(behavior = case_when(behavior_coop == 1 ~ "C",
+                                             behavior_defect == 1 ~ "D",
+                                             behavior_punish == 1 ~ "P"),
+                        behavior_numeric = case_when(behavior == "C" ~ 1, 
+                                                     behavior == "D" ~ 2,
+                                                     behavior == "P" ~ 3))
+  
 
 # First checking how many rounds have a punishment choice
 peace_rounds = NULL
@@ -98,6 +136,12 @@ visible_df = harmdata %>%
   tally(showScore) %>%
   rename(wealth_visible = n)
 
+# Creating the network features
+
+names(harmdata)
+
+# can use gender, mean payoff, avg weatlh variables (PosWeatlh, WeatlhLevel), rank?, country
+
 netdata = harmdata %>% 
   group_by(game) %>%
   select(superid, game, round, showScore, behavior_coop, behavior_defect, 
@@ -107,19 +151,22 @@ netdata = harmdata %>%
   arrange(game, round, superid) %>%
   mutate(peace_game = ifelse(game %in% peace_games, 1, 0)) %>%
   summarize(showScore = mean(showScore),
-            n = n(),
-            mean_deg = mean(degree, na.rm = T),
-            mean_init_deg = mean(initial_degree, na.rm = T),
-            prop_punish = mean(behavior_punish, na.rm = T),
-            prop_coop = mean(behavior_coop, na.rm = T),
-            init_coop = mean(initial_coop, na.rm = T),
-            init_punish = mean(initial_punish, na.rm = T),
-            mean_gini = mean(initial_local_gini, na.rm = T),
-            peace_game = mean(peace_game))
+            n = n(), # N is the number of game actions
+            mean_deg = mean(degree, na.rm = T), # The mean degree across all rounds? can do individual rounds
+            mean_init_deg = mean(initial_degree, na.rm = T),  #Mean initial degree of the game
+            prop_punish = mean(behavior_punish, na.rm = T), #The proportion of punishing across all game actions
+            prop_coop = mean(behavior_coop, na.rm = T), # The proportion of coop across all game actions
+            init_coop = mean(initial_coop, na.rm = T), #The proportion of initial cooperators
+            init_punish = mean(initial_punish, na.rm = T), # The proportion of initial punishers
+            mean_gini = mean(initial_local_gini, na.rm = T), # The average initial gini at the start of the game
+            peace_game = mean(peace_game)) # The outcome variable 
+
+# To do: mean degree across each round by game, mean payoff at the end of each game, 
 
 netdata1 = left_join(netdata, count_df, by = "game")
 netdata2 = netdata1 %>% left_join(count_df, by = "game")
 
+netdata1
 
 #### Regression models ####
 ## Using binary peace status as the outcome
@@ -132,8 +179,8 @@ summary(m1)
 
 m1.1 = glm(peace_game ~ showScore + punishments, data = netdata1, family = "binomial")
 summary(m1.1)
-
 m1.2 = glm(peace_game ~ showScore + coop, data = netdata1, family = "binomial")
+
 summary(m1.2)
 
 m1.3 = glm(peace_game ~ showScore + defects, data = netdata1, family = "binomial")

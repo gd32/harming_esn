@@ -31,7 +31,11 @@ behavior_table = harmdata %>% mutate(behavior = case_when(behavior_coop == 1 ~ "
   mutate(game = superid %/% 100) 
 
 # 2. the table for local punish rate in the previous round by game + round
-rate_table = data1 %>% mutate(behavior_numeric = case_when(behavior == "C" ~ 1, 
+rate_table = data1 %>% 
+  mutate(behavior = case_when(behavior_coop == 1 ~ "C",
+                              behavior_defect == 1 ~ "D",
+                              behavior_punish == 1 ~ "P"),
+  behavior_numeric = case_when(behavior == "C" ~ 1, 
                                        behavior == "D" ~ 2,
                                        behavior == "P" ~ 3)) %>%
   group_by(superid, round) %>%
