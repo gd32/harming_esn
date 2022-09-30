@@ -51,3 +51,4 @@ rsconnect/
 *.Rdata
 *.csv
 Data/.DS_Store
+.DS_Store

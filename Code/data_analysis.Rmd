@@ -256,14 +256,14 @@ xtabs(~gender, r2df) # 499 provided gender, F: 206 (41%) vs M: 392 (59%)
 
 # Country
 xtabs(~country_3cat, r2df) #408 (57%) US, 257 (36%) India, 7% Other
-length(unique(harmdata$country)) #27 unique countries
+  length(unique(harmdata$country)) #27 unique countries
 
 # Behavior time
 mean(harmdata$behaviorTime, na.rm = T) #~7870 ms
 
 # Behaviors
-table(harmdata$behavior_coop) #4878 coop
-table(harmdata$behavior_defect) #4336 defect
+table(harmdata$behavior_coop) #4878 coop (45.5%)
+table(harmdata$behavior_defect) #4336 defect (40.4%)
 table(harmdata$behavior_punish) #562 defect = 5.2%
 
 # cumulativePayoff
