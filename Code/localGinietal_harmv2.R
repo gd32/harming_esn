@@ -61,6 +61,8 @@ for (i in 1:(dim(ldata4)[1]-1)) {
   print(i)
 }
 save(ldata4,file="ldata4_0316X.Rdata")
+
+# Start here for creating new variables
 load("~/Documents/Projects/harming_esn/Data/harming_jsons/ldata4_0316X.Rdata") #ldata
 load("~/Documents/Projects/harming_esn/Data/harming_jsons/node_1aX.Rdata") #ndata
 

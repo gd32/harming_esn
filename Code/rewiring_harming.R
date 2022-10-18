@@ -67,7 +67,7 @@ names(ndata_alters_list)[4:20] = c("alter1", "alter2", "alter3", "alter4",
                                    "alter13", "alter14", "alter15", "alter16",
                                    "alter17")
 
-
+ndata_alters_list
 
 # left_join(ndata_final, ndata_alters_list, by = c("superid", "round", "game"))
 
@@ -79,6 +79,8 @@ ndata_alters_lag$round = ndata_alters_lag$round+1
 ndata_alters = merge(ndata_alters_list, ndata_alters_lag, 
                      by = c("superid", "round", "game")) %>%
   arrange(superid, round)
+
+ndata_alters
 
 ndata_base = ndata1 %>% 
   select(round, game, starts_with("id")) %>%

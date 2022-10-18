@@ -82,16 +82,46 @@ peace_str = c("0", "0", "0", "0", "0")
 peace_games = NULL
 war_games = NULL
 for(i in 1:50){
-  tmp = harmdata %>% filter(game == i, round !=0) %>% group_by(round) %>% 
-    tally(behavior_punish) %>% pull(n)
-  if(subseq_check(tail(tmp, 5), peace_str) == T){
+  for(j in 5:11){
+    tmp = harmdata %>% filter(game == i, round !=0) %>% group_by(round) %>% tally(behavior_punish) %>% pull(n)
+    if(subseq_check(tmp[j:j+4], peace_str) == T){
+      peace_games = c(peace_games, i)
+    } else {
+      war_games = c(war_games, i)
+    }
+  }
+}
+
+
+peace_games = NULL
+war_games = NULL
+for(i in 1:50){
+for(j in 5:11){
+  tmp = harmdata %>% filter(game == i, round !=0) %>% group_by(round) %>% tally(behavior_punish) %>% pull(n)
+  if(subseq_check(tmp[j:(j+4)], peace_str) == T){
     peace_games = c(peace_games, i)
   } else {
     war_games = c(war_games, i)
   }
+  }
 }
-# 1 5 7 8 9 13 14 15 16 20 26 28 37 45
-length(peace_games) #14 games had peace (last 5 rounds had no punishment)
+peace_games
+length(unique(peace_games)) # Under the definition of having any 5 consequtive rounds of no punishment, 18 games had peace
+
+# Old peace definition: # length(peace_games) #14 games had peace (last 5 rounds had no punishment)
+# peace_games = NULL
+# war_games = NULL
+# for(i in 1:50){
+#   tmp = harmdata %>% filter(game == i, round !=0) %>% group_by(round) %>% 
+#     tally(behavior_punish) %>% pull(n)
+#   if(subseq_check(tail(tmp, 5), peace_str) == T){
+#     peace_games = c(peace_games, i)
+#   } else {
+#     war_games = c(war_games, i)
+#   }
+# }
+# # 1 5 7 8 9 13 14 15 16 20 26 28 37 45
+# length(peace_games) #14 games had peace (last 5 rounds had no punishment)
 
 punish_counts = NULL
 for(i in peace_games){
@@ -166,13 +196,11 @@ netdata = harmdata %>%
 netdata1 = left_join(netdata, count_df, by = "game")
 netdata2 = netdata1 %>% left_join(count_df, by = "game")
 
-netdata1
 
 #### Regression models ####
 ## Using binary peace status as the outcome
 m0 = glm(peace_game ~ showScore, data = netdata1, family = "binomial")
 summary(m0)
-netdata1
 
 m1 = glm(peace_game ~ showScore + punishments + coop + defects, data = netdata1, family = "binomial")
 summary(m1)
@@ -215,6 +243,15 @@ m8 = lm(punishments ~ showScore + mean_deg +  mean_init_deg +
          prop_punish + prop_coop + init_punish + init_coop + mean_gini, 
        data = netdata1)
 summary(m5)
+
+# New reseults generally make more sense - no effect of wealth visibility on "peacefulness" as the balance is more even
+
+xtabs(~showScore + peace_game, netdata1)
+
+
+
+
+
 
 #### Part 2 - Round Level Analysis
 peace_rounds = NULL

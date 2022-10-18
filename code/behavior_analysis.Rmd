@@ -36,6 +36,23 @@ load("~/Documents/Projects/harming_esn/Data/ndata_individual.Rdata") #ndata1
 load("~/Documents/Projects/harming_esn/Data/data1.Rdata") #data1
 ```
 
+## Regression analysis with the individual-peace status as the outcome
+
+Individual peace defined as not being a punisher + no one in the local network is a punisher.
+
+```{r}
+# Import data and packages
+data1 = data1 %>%
+  mutate(peace_individual = ifelse(local_rate_punish_lag == 0 & 
+                                     behavior_punish_lag == 0, 1, 0))
+
+
+
+
+
+```
+
+
 ## Show distriubtion of decision time
 
 ```{r}
@@ -74,6 +91,7 @@ dt_data_by_behavior = left_join(dt_coop, dt_def, by = "superid") %>%
   left_join(dt_punish, by = "superid") %>%
   left_join(dt_non_punish, by = "superid")
 
+
 ```
 
 ```{r}
@@ -102,7 +120,6 @@ dt_data_by_behavior %>%
   xlab("log Decision Time (s)") +
   ylab("Density")
 
-
 ## Together
 dt_data_by_behavior %>%
   ggplot() +
@@ -110,6 +127,64 @@ dt_data_by_behavior %>%
   geom_density(aes(x = mean_log_dt_nonpunish, y = ..scaled..), color = "blue")+
   xlab("log seconds")+
   ylab("Density") 
+
+## Together, but on the second scale
+dt_data_by_behavior %>%
+  mutate(mean_dt_punish_secs = mean_dt_punish * 1000,
+         mean_dt_nonpunish_secs = mean_dt_nonpunish * 1000) %>%
+  ggplot() + 
+  geom_density(aes(x = mean_dt_punish_secs, y = ..scaled..), color = "orange") +
+  geom_density(aes(x = mean_dt_nonpunish_secs, y = ..scaled..), color = "blue")+
+  xlab("Seconds")+
+  ylab("Density") 
+
+dt_data_by_behavior %>%
+  mutate(mean_dt_punish_secs = mean_dt_punish/1000,
+         mean_dt_nonpunish_secs = mean_dt_nonpunish/1000,
+         mean_punish_secs_log10 = log10(mean_dt_punish_secs),
+         mean_nonpunish_secs_log10 = log10(mean_dt_nonpunish_secs)) %>%
+  summarize(mean_punish = mean1(mean_dt_punish_secs),
+            mean_nonpunish = mean1(mean_dt_nonpunish_secs),
+            median_punish = median(mean_dt_punish_secs, na.rm = T),
+            median_nonpunish = median(mean_dt_nonpunish_secs, na.rm = T))
+
+dt_data_by_behavior %>%
+  mutate(mean_dt_punish_secs = mean_dt_punish/1000,
+         mean_dt_nonpunish_secs = mean_dt_nonpunish/1000,
+         mean_punish_secs_log10 = log10(mean_dt_punish_secs),
+         mean_nonpunish_secs_log10 = log10(mean_dt_nonpunish_secs)) %>%
+  ggplot() + 
+  geom_density(aes(x = mean_dt_punish_secs, y = ..scaled..), color = "orange") +
+  geom_density(aes(x = mean_dt_nonpunish_secs, y = ..scaled..), color = "blue")+
+  xlab("Seconds")+
+  ylab("Density") +
+  xlim(0, 10)
+```
+```{r}
+dt_data_by_behavior %>%
+  mutate(mean_dt_punish_secs = mean_dt_punish/1000,
+         mean_dt_nonpunish_secs = mean_dt_nonpunish/1000,
+         mean_punish_secs_log10 = log10(mean_dt_punish_secs),
+         mean_nonpunish_secs_log10 = log10(mean_dt_nonpunish_secs)) %>%
+  summarize(mean_punish = mean1(mean_dt_punish_secs),
+            mean_nonpunish = mean1(mean_dt_nonpunish_secs),
+            median_punish = median(mean_dt_punish_secs, na.rm = T),
+            median_nonpunish = median(mean_dt_nonpunish_secs, na.rm = T))
+```
+
+
+```{r}
+dt_data_by_behavior %>%
+  mutate(mean_dt_punish_secs = mean_dt_punish/1000,
+         mean_dt_nonpunish_secs = mean_dt_nonpunish/1000,
+         mean_punish_secs_log10 = log10(mean_dt_punish_secs),
+         mean_nonpunish_secs_log10 = log10(mean_dt_nonpunish_secs)) %>%
+  ggplot() + 
+  geom_density(aes(x = mean_punish_secs_log10, y = ..scaled..), color = "orange") +
+  geom_density(aes(x = mean_nonpunish_secs_log10, y = ..scaled..), color = "blue")+
+  xlab("Seconds (log10)")+
+  ylab("Density") +
+  xlim(0, 2.5)
 ```
 
 ```{r}
@@ -242,6 +317,9 @@ netdata1 = left_join(netdata, pun_counts, by = "game")
 
 
 ```
+
+## Individual-level regression using individual peace status as the outcome (i.e. no local-network punishment, ego is not a punisher)
+
 
 ## Understanding what this aggregate dataframe `netdata` is
 

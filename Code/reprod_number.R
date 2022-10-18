@@ -90,8 +90,6 @@ pun_counts_long %>%
   ggplot() +
   geom_jitter(aes(x = punishers, y = connected_punishers, group = game, color = wealth)) 
 
-library(Hmisc)
-
 pun_counts_long %>%
   filter(game %nin% c(22, 46)) %>%
   ggplot() +

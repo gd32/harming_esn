@@ -66,3 +66,7 @@ dt_data_by_behavior %>%
   xlab("Difference in decision time (punish - nonpunish)") +
   ylab("Frequency")
 
+## Testing the threshold for decision time
+harmdata %>% mutate(behavior_time_secs = behaviorTime/1000) %>%
+  
+
