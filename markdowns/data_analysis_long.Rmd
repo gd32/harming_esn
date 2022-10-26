@@ -1,0 +1,236 @@
+---
+title: "Evolution of Peace and Punishment in Experimental Social Networks"
+author: "George Dewey, Akihiro Nishi, Ryo Ikesu"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This R Markdown document contains the data  analysis for our article "Evolution of Peace and Punishment in Experimental Social Networks."
+
+# Data Management + Cleaning
+
+## Load packages
+
+```{r, message = F, warning = F}
+library(tidyverse) # for data management
+library(reshape2) # for data management
+library(magrittr) # for data management
+library(lme4) # for mixed effects regression
+library(lmerTest) # for p-values in regression output
+library(reldist) # to calculate gini
+library(rgeolocate) # to convert IPs to country
+library(igraph) # for network analysis
+```
+
+## Load data
+
+```{r}
+# 4 main data sources: 
+# harmdata - cleaned raw individual-level data 
+# ldata4 - tie component of network-level data
+# ndata1 - node component of network-level data
+# data1 - main dataset aggregated from above + adding lags
+
+load("~/Documents/Projects/harming_esn/Data/harmdata.Rdata") #harmdata
+load("~/Documents/Projects/harming_esn/Data/harming_jsons/ldata4_0316X.Rdata") #ldata4
+load("~/Documents/Projects/harming_esn/Data/ndata_individual.Rdata") #ndata1
+load("~/Documents/Projects/harming_esn/Data/data1.Rdata") #data1
+```
+
+
+## Create complete dataset for regression
+
+```{r}
+# Exclude rows with missing data - no behavior etc.
+data1_cc = data1 %>% na.omit()
+
+# Create categorical behavior
+data1_cc = data1_cc %>% mutate(behavior = case_when(behavior_coop == 1 ~ "C",
+                                      behavior_defect == 1 ~ "D",
+                                      behavior_punish == 1 ~ "P"),
+                 behavior_lag = case_when(behavior_coop_lag == 1 ~ "C",
+                                          behavior_defect_lag ==1 ~ "D",
+                                          behavior_punish_lag == 1 ~ "P"),
+                 behavior_lag2 = case_when(behavior_coop_lag2 == 1 ~ "C",
+                                           behavior_defect_lag2 == 1 ~ "D",
+                                            behavior_punish_lag2 == 1 ~ "P"))
+
+data1_cc$local_rate_punish_cat4 = 
+  case_when(data1_cc$local_rate_punish_lag >=0 & data1_cc$local_rate_punish_lag <= 0.05 ~ 0,
+            data1_cc$local_rate_punish_lag > 0.05 & data1_cc$local_rate_punish_lag <= 0.1 ~ 1,
+            data1_cc$local_rate_punish_lag > 0.1 & data1_cc$local_rate_punish_lag <= 0.15 ~ 2,
+            data1_cc$local_rate_punish_lag > 0.15 & data1_cc$local_rate_punish_lag <= 0.2 ~ 3,
+            data1_cc$local_rate_punish_lag > 0.2 & data1_cc$local_rate_punish_lag <= 0.25 ~ 4,
+            data1_cc$local_rate_punish_lag > 0.25 ~ 5)
+
+data1_cc$local_rate_coop_cat4 = 
+  case_when(data1_cc$local_rate_coop_lag > 0 & data1_cc$local_rate_coop_lag <= 0.3 ~ 4,
+            data1_cc$local_rate_coop_lag > 0.3 & data1_cc$local_rate_coop_lag <= 0.5 ~ 3,
+            data1_cc$local_rate_coop_lag > 0.5 & data1_cc$local_rate_coop_lag <= 0.7 ~ 2,
+            data1_cc$local_rate_coop_lag > 0.7 & data1_cc$local_rate_coop_lag <= 0.9 ~ 1,
+            data1_cc$local_rate_coop_lag > 0.9 ~ 0)
+
+round(addmargins(prop.table(xtabs(~local_rate_coop_cat4 + behavior_punish, data1_cc))), digits = 3)
+```
+```{r}
+# Checking sample sizes
+dim(harmdata) #10727 recorded actions
+length(unique(harmdata$superid)) #745 unique participants
+
+# showScore
+table(harmdata$showScore) #wealth visibility - balanced
+
+# Demographics
+r2df = harmdata %>% filter(round == 2)
+length(harmdata %>% filter(round == 2) %>% pull(unique(superid))) 
+#713 individuals through round 2
+
+# Age
+mean(harmdata$age, na.rm = T) #32.86 years
+
+# Gender
+xtabs(~gender, r2df) # 499 provided gender, F: 206 (41%) vs M: 392 (59%)
+
+# Country
+xtabs(~country_3cat, r2df) #408 (57%) US, 257 (36%) India, 7% Other
+  length(unique(harmdata$country)) #27 unique countries
+
+# Behavior time
+mean(harmdata$behaviorTime, na.rm = T) # ~7870 ms
+
+# Behaviors
+table(harmdata$behavior_coop) #4878 coop (45.5%)
+table(harmdata$behavior_defect) #4336 defect (40.4%)
+table(harmdata$behavior_punish) #562 punish (5.2%)
+
+# cumulativePayoff
+table(factor(harmdata$initial_score)) # 70% low, 30% high
+mean(harmdata$cumulativePayoff, na.rm =T) #1584 (so mean gain of ~ 1500 units)
+# overall a gain - players started with 200 (low) or 1150 units (high)
+
+# degree
+mean(harmdata$degree, na.rm = T) #6
+
+# How many rounds with an without punishments?
+peace_rounds = NULL
+punish_rounds = NULL
+for(i in 1:50){
+  tmp = harmdata %>% filter(game == i, round !=0) %>% group_by(round) %>% 
+  tally(behavior_punish) %>% group_by(n) %>% summarize(round_count = n())
+  peace_rounds = c(peace_rounds, 
+                   sum(tmp %>% filter(n == 0) %>% pull(round_count)))
+  punish_rounds = c(punish_rounds, 
+                    sum(tmp %>% filter(n != 0) %>% pull(round_count)))
+}
+
+sum(peace_rounds) #377 rounds with no punish choice
+sum(punish_rounds) #373 rounds with at least 1 punish choice
+```
+
+## Regression Models
+
+We use logistic mixed effects models controlling for clustering by game and player and account for round by round variation by including an indicator variable for each individual game round.
+
+### Model 1: Choosing punishment vs. wealth visibility
+
+```{r}
+m1 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag+ factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+se = sqrt(diag(vcov(m1)))
+# table of estimates with 95% CI
+tab_m1 = cbind(Est = fixef(m1), LL = fixef(m1) - 1.96 * se, UL = fixef(m1) + 1.96 * se)
+round(exp(tab_m1), digits = 3)[1:11,]
+```
+
+### Model 2: Using categorical local punish rate from the prior round (checking for threshold)
+
+```{r}
+m2 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + factor(local_rate_punish_cat4) + cPayoffS_lag + degree_lag + happ + happ_lag + factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+se = sqrt(diag(vcov(m2)))
+# table of estimates with 95% CI
+tab_m2= cbind(Est = fixef(m2), LL = fixef(m2) - 1.96 * se, UL = fixef(m2) + 1.96 * se)
+round(exp(tab_m2), digits = 3)[1:16,]
+```
+
+## Method 2 - Punishment should be more likely to be used by cooperators rather than defectors
+
+THe proportion of C->P should be greater than that of D->P.
+
+```{r}
+# Looking at behavior change from coop -> not coop
+coop_to_not_coop = data1 %>% 
+  group_by(game, superid) %>% 
+  select(superid, game, round, behavior_coop, behavior_defect, behavior_punish, 
+         behavior_coop_lag, behavior_defect_lag, behavior_punish_lag,
+         local_rate_coop, local_rate_defect, local_rate_punish,
+         local_rate_coop_lag, local_rate_defect_lag, local_rate_punish_lag,
+         initial_coop, initial_defect, initial_punish, log_behaviorTime_lag) %>%
+  filter(round != 0, behavior_coop != 1, behavior_coop_lag == 1) 
+
+# Confirm that repetition and change differ in time
+data2 = data1 %>% 
+  group_by(game, superid) %>% 
+  select(superid, game, round, behavior_coop, behavior_defect, behavior_punish, 
+         behavior_coop_lag, behavior_defect_lag, behavior_punish_lag,
+         local_rate_coop, local_rate_defect, local_rate_punish,
+         local_rate_coop_lag, local_rate_defect_lag, local_rate_punish_lag,
+         initial_coop, initial_defect, initial_punish, log_behaviorTime_lag) %>%
+  mutate(behavior = case_when(behavior_coop == 1 ~ "C",
+                              behavior_defect == 1 ~ "D",
+                              behavior_punish == 1 ~ "P"),
+         behavior_lag = case_when(behavior_coop_lag == 1 ~ "C",
+                                  behavior_defect_lag == 1 ~ "D",
+                                  behavior_punish_lag == 1 ~ "P"),
+         repetition = ifelse(behavior == behavior_lag, 1, 0))
+
+# Yes, the mean time for repeated behavior is shorter
+data2 %>% 
+  na.omit() %>%
+  ggplot() + 
+  geom_boxplot(aes(x=factor(repetition, levels = c(1, 0)), 
+                   y = log_behaviorTime_lag))
+
+rep_times = data2 %>% na.omit() %>% 
+  filter(repetition == 1) %>% pull(log_behaviorTime_lag)
+diff_times = data2 %>% na.omit() %>% 
+  filter(repetition == 0) %>% pull(log_behaviorTime_lag)
+t.test(rep_times, diff_times) # confirmed
+```
+
+```{r}
+# Is it different for C-C, D-D, P-P?
+data2 %>% 
+  mutate(rep_cats = case_when(behavior == "C" & behavior_lag == "C" ~ "C-C",
+                              behavior == "D" & behavior_lag == "D" ~ "D-D",
+                              behavior == "P" & behavior_lag == "P" ~ "P-P")) %>% 
+  na.omit() %>% 
+  ggplot() + 
+  geom_boxplot(aes(x = factor(rep_cats, levels = c("C-C", "D-D", "P-P")), 
+                   y = log_behaviorTime_lag))
+# the median punish time is a bit longer, but not by much - confirms repetition
+# is the fastest/easiest regardless of type
+```
+
+```{r}
+# Are there differences for the different combinations? CD CP DC DP PC PD
+data2 = data2 %>% mutate(diff_cats = case_when(behavior == "C" & behavior_lag == "D" ~ "CD",
+                                       behavior == "C" & behavior_lag == "P" ~ "CP",
+                                       behavior == "D" & behavior_lag == "C" ~ "DC",
+                                       behavior == "D" & behavior_lag == "P" ~ "DP",
+                                       behavior == "P" & behavior_lag == "C" ~ "PC",
+                                       behavior == "P" & behavior_lag == "D" ~ "PD"))
+
+data2 %>% 
+  na.omit() %>%
+  ggplot() +
+  geom_boxplot(aes(x=factor(diff_cats), y = log_behaviorTime_lag)) 
+# Going back to cooperation is faster
+
+prop.table(xtabs(~diff_cats, data2))
+
+table(data2_subset$diff_cats)
+chisq.test(c(169, 146), p =c(0.5, 0.5)) #not significant - while C->P is more prevalent compared to D->P, the difference is not significant
+```

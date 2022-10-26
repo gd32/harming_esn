@@ -70,6 +70,8 @@ xtabs(~peace_individual + behavior_coop_lag, data1) # some difference
 
 xtabs(~peace_individual + behavior_punish_lag, data1) # no punishers in prev round are in peace
 
+xtabs(~behavior_punish_lag + peace_individual, data1) # no punishers in prev round are in peace
+
 # age
 data1 %>% 
   na.omit() %>%

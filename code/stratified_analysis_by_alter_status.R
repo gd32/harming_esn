@@ -81,4 +81,102 @@ tdata1 = tdata_merged %>%
 
 xtabs(~peace_individual + behavior_punish_lag + alter_punish_flag, tdata1)
 
-round(addmargins(prop.table(xtabs(~peace_individual + behavior_punish_lag + alter_punish_flag, tdata1))), 3)
+xtabs(~behavior_punish_lag + peace_individual, data1) # no punishers in prev round are in peace
+
+round(addmargins(prop.table(xtabs(~behavior_punish_lag + peace_individual + alter_punish_flag, tdata1))), 3)
+
+xtabs(~behavior_punish_lag + peace_individual + alter_punish_flag, tdata1)
+round(addmargins(prop.table(xtabs(~behavior_punish_lag + peace_individual + alter_punish_flag, tdata1))), 3)
+
+round(addmargins(prop.table(xtabs(~behavior_punish_lag + peace_individual + alter_punish_flag, tdata1), c(3, 1))), 3)
+
+## Based on above, we see that (280 decisions) 4.2% of those who did not punish 
+## previously and had no punishing alters did not end up in peace in the 
+## following round. 
+## Conversely, 5.6% of people who did not punish previously but had punishing
+## neighbors did end up in peace.  
+## 
+## This suggests possible transport of punishing from new members of the social
+## network, or spontaneous start of punishment by either new or old members.
+## The 104 instances of alter punishment + ego no punishment suggests people
+## may excise punishers from their network to establish peace (albeit at a very)
+## low rate.
+## 
+
+## To further evaluate this, first we check if any individuals repeated this 
+## behavior
+
+tdata_p2w = tdata1 %>% 
+  filter(alter_punish_flag == 0, 
+         behavior_punish_lag == 0, 
+         peace_individual == 0) %>%
+  mutate(peace_to_war = 1)
+
+tdata_w2p = tdata1 %>%
+  filter(alter_punish_flag == 1,
+         behavior_punish_lag == 0,
+         peace_individual == 1) %>%
+  mutate(war_to_peace = 1)
+
+tdata_p2w_to_merge = tdata_p2w %>%
+  select(superid, round, game, peace_to_war)
+tdata_w2p_to_merge = tdata_w2p %>%
+  select(superid, round, game, war_to_peace)
+  
+data2 = data1 %>% 
+  as_tibble %>%
+  left_join(tdata_p2w_to_merge, by = c("superid", "round", "game")) %>%
+  left_join(tdata_w2p_to_merge, by = c("superid", "round", "game")) %>%
+  mutate(peace_to_war = case_when(peace_to_war == 1 ~ 1,
+                                  is.na(peace_to_war) == TRUE ~ 0),
+         war_to_peace = case_when(war_to_peace == 1 ~ 1,
+                                  is.na(war_to_peace) == TRUE ~ 0)) 
+
+# crosstabs/boxplots
+names(data2)
+
+# age
+ggplot(data2) +
+  geom_boxplot(aes(x=factor(peace_to_war), y=age))
+
+ggplot(data2) +
+  geom_boxplot(aes(x=factor(war_to_peace), y=age))
+
+# gender
+prop.table(xtabs(~gender, data2)) #58% M vs. 31% F
+round(prop.table(xtabs(~gender + peace_to_war, data2)), 3) #the ratio is close
+round(prop.table(xtabs(~\gender + war_to_peace, data2)), 3) #same for war to peace
+
+# country
+round(prop.table(xtabs(~country_3cat + peace_to_war, data2)), 3) #1.6% for US, 0.9% for india
+round(prop.table(xtabs(~country_3cat + war_to_peace, data2)), 3) #0.3% for US, 0.6% for india
+# yes - makes sense, Indian players are more punishing compared to US players so 
+# there should be more peaceful converts among indian players 
+
+# wealth visibility
+round(prop.table(xtabs(~showScore + peace_to_war, data2)), 3)
+round(prop.table(xtabs(~showScore + war_to_peace, data2)), 3) #no major difference for wealth visibility
+
+# Initial score
+round(prop.table(xtabs(~factor(initial_score) + peace_to_war, data2)), 3)
+round(prop.table(xtabs(~factor(initial_score) + war_to_peace, data2)), 3)
+
+# Cumulative payoff - different ranges, but mean/median are close - probably due to sample size
+ggplot(data2) +
+  geom_boxplot(aes(x=factor(peace_to_war), y=cumulativePayoff))
+
+ggplot(data2) +
+  geom_boxplot(aes(x=factor(war_to_peace), y=cumulativePayoff))
+
+# degree - slightly high in war-to-peace transition (but not by much)
+ggplot(data2) +
+  geom_boxplot(aes(x=degree, y=factor(peace_to_war)))
+
+ggplot(data2) +
+  geom_boxplot(aes(x=degree, y=factor(war_to_peace)))
+
+
+## Can we understand what context leads to this behavior?
+
+tdata_merged %>%
+  
