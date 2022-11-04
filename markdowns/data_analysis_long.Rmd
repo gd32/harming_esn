@@ -1,5 +1,5 @@
 ---
-title: "Evolution of Peace and Punishment in Experimental Social Networks"
+title: "Evolution of Punishment and Peace in Experimental Social Networks"
 author: "George Dewey, Akihiro Nishi, Ryo Ikesu"
 date: "`r Sys.Date()`"
 output: html_document
@@ -9,14 +9,66 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-This R Markdown document contains the data  analysis for our article "Evolution of Peace and Punishment in Experimental Social Networks."
+This R Markdown document contains the data analysis and visualization code for our article "Evolution of Peace and Punishment in Experimental Social Networks."
 
-# Data Management + Cleaning
+# Variable Definitions
 
-## Load packages
+-   `age`: player's age
+-   `gender`: player's gender (male or female)
+-   `behavior`: behavior in the current round (C: Cooperation; D: Defection, P: Punishment)
+-   `initial_score`: score before the games (200 or 1150)
+-   `behavior_coop`: indicator variable for cooperation of ego in round *t*
+-   `behavior_defect`: indicator variable for defection of ego in round *t*
+-   `behavior_punish`: indicator variable for punishment of ego in round *t*
+-   `behavior_coop_lag`: indicator variable for cooperation of ego in round *t-1*
+-   `behavior_punish_lag`: indicator variable for punishment of ego in round *t-1*
+-   `local_rate_coop_lag`: proportion of cooperation among alters of ego in round *t-1*
+-   `local_rate_punish_lag`: proportion of punishment among alters of ego in round *t-1*
+-   `local_rate_punish_lag_cat3`: 3-category variable for `local_rate_punish_lag`
+    -   1: 0-5%
+
+    -   2: 5-15%
+
+    -   3: \>15%
+-   `local_rate_punish_lag_cat6`: 6-category variable for `local_rate_punish_lag`
+    -   1: 0-5%
+
+    -   2: 5-10%
+
+    -   3: 10-15%
+
+    -   4: 15-20%
+
+    -   5: 20-25%
+
+    -   6: \>25%)
+-   `local_rate_coop_cat5`: 5-category variable for `local_rate_coop_lag`
+    -   1: \>80%
+
+    -   2: 60-80%
+
+    -   3: 30-60%
+
+    -   4: 10-30%
+
+    -   5: 0-10%
+-   `log_behaviorTime`: time to choose behavior (unit: log milliseconds)
+-   `log_behaviorTime_lag`: time to choose behavior (unit: log milliseconds)
+-   `behaviorTime_sec`: time to choose behavior (unit: seconds)
+-   `cPayoffS_lag`: standardized cumulative payoff/wealth in round *t-1*
+-   `conflict`: indicator variable for the proportion of punishment among alters in round *t-1* exceeding 15%
+-   `degree_lag`: the number of ties/connecting neighbors in round *t-1*
+-   `happ_lag`: subjective well-being in round *t-1*
+-   `showScore`: is wealth of connecting neighbors visible (1) or invisible (0)
+-   `transitivity`: the measure of the tendency of network nodes to cluster together
+
+# Data Management
+
+## Load packages and establish helper functions
 
 ```{r, message = F, warning = F}
 library(tidyverse) # for data management
+library(data.table) # for table management
 library(reshape2) # for data management
 library(magrittr) # for data management
 library(lme4) # for mixed effects regression
@@ -24,29 +76,51 @@ library(lmerTest) # for p-values in regression output
 library(reldist) # to calculate gini
 library(rgeolocate) # to convert IPs to country
 library(igraph) # for network analysis
+library(gtable) # for visualization
+library(grid) # for visualization
+library(ggsignif) # for error bars
+library(cowplot) # for visualization
+library(gridExtra) # for visualization
+library(reldist) # to calculate gini
+
+
+mean1 = function(x) {mean(x,na.rm=TRUE)}
+median1 = function(x) {median(x, na.rm = TRUE)}
 ```
 
 ## Load data
 
 ```{r}
-# 4 main data sources: 
+# 4 main datasets: 
 # harmdata - cleaned raw individual-level data 
 # ldata4 - tie component of network-level data
 # ndata1 - node component of network-level data
-# data1 - main dataset aggregated from above + adding lags
+# data1 - main aggregated dataset including lag (rounds t-1, t-2, etc.) data
 
+# harmdata
 load("~/Documents/Projects/harming_esn/Data/harmdata.Rdata") #harmdata
-load("~/Documents/Projects/harming_esn/Data/harming_jsons/ldata4_0316X.Rdata") #ldata4
-load("~/Documents/Projects/harming_esn/Data/ndata_individual.Rdata") #ndata1
+
+# ldata4
+load("~/Documents/Projects/harming_esn/Data/harming_jsons/ldata4_0316X.Rdata")
+
+# ndata1
+load("~/Documents/Projects/harming_esn/Data/ndata_individual.Rdata")
+
+# data1
 load("~/Documents/Projects/harming_esn/Data/data1.Rdata") #data1
 ```
 
-
-## Create complete dataset for regression
+## Create complete case dataset for regression + figures
 
 ```{r}
 # Exclude rows with missing data - no behavior etc.
-data1_cc = data1 %>% na.omit()
+# transform the scale of behavior time from msec to sec (by RI)
+data1$behaviorTime_sec = (data1$behaviorTime)/1000
+
+#replace NaNs (from missing lag data) with NAs
+data1b = data1 
+data1_cc = na.omit(data1b)
+dim(data1_cc)
 
 # Create categorical behavior
 data1_cc = data1_cc %>% mutate(behavior = case_when(behavior_coop == 1 ~ "C",
@@ -59,6 +133,7 @@ data1_cc = data1_cc %>% mutate(behavior = case_when(behavior_coop == 1 ~ "C",
                                            behavior_defect_lag2 == 1 ~ "D",
                                             behavior_punish_lag2 == 1 ~ "P"))
 
+## Creating the categorical variable for local punish rate in round t-1 
 data1_cc$local_rate_punish_cat4 = 
   case_when(data1_cc$local_rate_punish_lag >=0 & data1_cc$local_rate_punish_lag <= 0.05 ~ 0,
             data1_cc$local_rate_punish_lag > 0.05 & data1_cc$local_rate_punish_lag <= 0.1 ~ 1,
@@ -67,22 +142,66 @@ data1_cc$local_rate_punish_cat4 =
             data1_cc$local_rate_punish_lag > 0.2 & data1_cc$local_rate_punish_lag <= 0.25 ~ 4,
             data1_cc$local_rate_punish_lag > 0.25 ~ 5)
 
-data1_cc$local_rate_coop_cat4 = 
-  case_when(data1_cc$local_rate_coop_lag > 0 & data1_cc$local_rate_coop_lag <= 0.3 ~ 4,
-            data1_cc$local_rate_coop_lag > 0.3 & data1_cc$local_rate_coop_lag <= 0.5 ~ 3,
-            data1_cc$local_rate_coop_lag > 0.5 & data1_cc$local_rate_coop_lag <= 0.7 ~ 2,
-            data1_cc$local_rate_coop_lag > 0.7 & data1_cc$local_rate_coop_lag <= 0.9 ~ 1,
-            data1_cc$local_rate_coop_lag > 0.9 ~ 0)
+#categorical variable for the prevalence of punishment behavior 
+# in the previous round
+data1_cc$local_rate_punish_cat3 =
+  case_when(data1_cc$local_rate_punish_lag == 0 ~ 1,
+            data1_cc$local_rate_punish_lag > 0 & 
+              data1_cc$local_rate_punish_lag <= 0.15 ~ 2,
+            data1_cc$local_rate_punish_lag > 0.15 ~ 3)
 
-round(addmargins(prop.table(xtabs(~local_rate_coop_cat4 + behavior_punish, data1_cc))), digits = 3)
+data1_cc$local_rate_punish_cat6 = 
+  case_when(data1_cc$local_rate_punish_lag <= 0.05 ~ 1,
+            data1_cc$local_rate_punish_lag > 0.05 &
+              data1_cc$local_rate_punish_lag <= 0.1 ~ 2,
+            data1_cc$local_rate_punish_lag > 0.1 &
+              data1_cc$local_rate_punish_lag <= 0.15 ~ 3,
+            data1_cc$local_rate_punish_lag > 0.15 &
+              data1_cc$local_rate_punish_lag <= 0.2 ~ 4,
+            data1_cc$local_rate_punish_lag > 0.2 &
+              data1_cc$local_rate_punish_lag <= 0.25 ~ 5,
+            data1_cc$local_rate_punish_lag > 0.25 ~ 6) %>% as.factor()
+
+# round(addmargins
+#       (prop.table(xtabs(~local_rate_punish_cat3 + behavior_punish, data1_cc))),
+#       digits = 3)
+# 
+# round(addmargins
+#       (prop.table(xtabs(~local_rate_punish_cat6 + behavior_punish, data1_cc))),
+#       digits = 3)
+
+data1_cc$local_rate_coop_cat5 = 
+  case_when(data1_cc$local_rate_coop_lag > 0 & data1_cc$local_rate_coop_lag <= 0.1 ~ 5,
+            data1_cc$local_rate_coop_lag > 0.1 & data1_cc$local_rate_coop_lag <= 0.3 ~ 4,
+            data1_cc$local_rate_coop_lag > 0.3 & data1_cc$local_rate_coop_lag <= 0.6 ~ 3,
+            data1_cc$local_rate_coop_lag > 0.6 & data1_cc$local_rate_coop_lag <= 0.8 ~ 2,
+            data1_cc$local_rate_coop_lag > 0.8  ~ 1)
+
+# round(addmargins(prop.table(xtabs(~local_rate_coop_cat5 + behavior_punish, data1_cc))),
+#       digits = 3)
+# 
+# round(addmargins(prop.table(xtabs(~local_rate_coop_cat5 + behavior_punish, data1_cc),
+#                             margin = 1), margin = 2), digits = 3)
+
+# indicator variable for the punishment prevalence
+data1_cc = data1_cc %>% mutate(conflict = 
+                                 ifelse(local_rate_punish_lag > 0.15,1,0)
+                               %>% as.factor()) %>% as.data.table()
+
+dim(data1_cc)
 ```
+
+# Descriptive Statistics
+
+Summary of basic statistics about the player population/games played.
+
 ```{r}
-# Checking sample sizes
+# Checking sample size
 dim(harmdata) #10727 recorded actions
-length(unique(harmdata$superid)) #745 unique participants
+length(unique(harmdata$superid)) #745 unique participants 
 
 # showScore
-table(harmdata$showScore) #wealth visibility - balanced
+table(harmdata$showScore) # wealth visibility - balanced as intended
 
 # Demographics
 r2df = harmdata %>% filter(round == 2)
@@ -90,7 +209,7 @@ length(harmdata %>% filter(round == 2) %>% pull(unique(superid)))
 #713 individuals through round 2
 
 # Age
-mean(harmdata$age, na.rm = T) #32.86 years
+mean1(harmdata$age) #32.86 years
 
 # Gender
 xtabs(~gender, r2df) # 499 provided gender, F: 206 (41%) vs M: 392 (59%)
@@ -113,9 +232,9 @@ mean(harmdata$cumulativePayoff, na.rm =T) #1584 (so mean gain of ~ 1500 units)
 # overall a gain - players started with 200 (low) or 1150 units (high)
 
 # degree
-mean(harmdata$degree, na.rm = T) #6
+mean1(harmdata$degree) #6
 
-# How many rounds with an without punishments?
+# How many rounds with and without punishments?
 peace_rounds = NULL
 punish_rounds = NULL
 for(i in 1:50){
@@ -131,11 +250,348 @@ sum(peace_rounds) #377 rounds with no punish choice
 sum(punish_rounds) #373 rounds with at least 1 punish choice
 ```
 
-## Regression Models
+# Figure 1: Trajectory of wealth, behavior, and network structures, stratified by wealth visibility
+
+```{r, message = F, warning = F}
+# Set up additional convenience functions
+length1 <- function(x) {length(na.omit(x))}
+se1 <- function(x){sd(x, na.rm = TRUE)/sqrt(length(na.omit(x)))}
+se2 <- function(x) {sqrt(mean1(x)*(1-mean1(x))/length1(x))}
+
+# Standardized cumulative wealth (standardized within each network session)
+data1_wealth <- data1 %>% group_by(round, showScore) %>% 
+  summarise(wealth_mean = mean(cPayoffS), wealth_se = se1(cPayoffS))
+
+tr_wealth <- ggplot(data1_wealth, aes(x = round, y = wealth_mean,
+                                      linetype = factor(showScore))) +
+  geom_line() +
+  geom_errorbar(aes(ymin = wealth_mean - wealth_se,
+                    ymax = wealth_mean + wealth_se),
+                width=0, cex = 0.7, alpha = 0.3) +
+  labs(x = "Round", y = "Cumulative wealth \n(standardized)",
+       linetype = "Wealth visibility") + 
+  ggtitle("a") +
+  scale_x_continuous(breaks = seq(0, 15, 2)) +
+  scale_y_continuous(breaks = seq(-2, 2, 0.5)) +
+  scale_linetype_manual(labels = c("Invisible", "Visible"),
+                        values = c("dashed", "solid")) + 
+  theme_classic() + 
+  theme(legend.position = "top",
+        plot.title = element_text(size = 16, face = "bold"))
+
+# Extract the legend info.
+## https://note.com/eiko_dokusho/n/n8abcf3a08903
+g1<- ggplotGrob(tr_wealth)
+id.legend <- grep("guide", g1$layout$name)
+legend <- g1[["grobs"]][[id.legend]]
+
+# Network degree
+summary(data1$degree)
+data1[is.na(data1$degree),"degree"] <- 0
+summary(data1$degree)
+
+data1_degree <- data1 %>%
+  group_by(round, showScore) %>% 
+  summarise(degree_mean = mean(degree),
+            degree_se = se1(degree))
+
+tr_degree <- ggplot(data1_degree, aes(x = round, y = degree_mean,
+                                      linetype = factor(showScore))) +
+  geom_line() +
+  geom_errorbar(aes(ymin = degree_mean - degree_se,
+                    ymax = degree_mean + degree_se),
+                width=0, cex = 0.7, alpha = 0.3) +
+  labs(x = "Round", y = "Network degree",
+       linetype = "Wealth visibility") + 
+  ggtitle("b") +
+  scale_x_continuous(breaks = seq(0, 15, 2)) +
+  scale_y_continuous(breaks = seq(0, 10, 2.5), limits = c(0,10)) +
+  scale_linetype_manual(labels = c("Invisible", "Visible"),
+                        values = c("dashed", "solid")) + 
+  theme_classic() +
+  theme(legend.position = "none",
+        plot.title = element_text(size = 16, face = "bold"))
+
+# Network transitivity
+summary(data1$transitivity)
+# data1[is.na(data1$transitivity),"transitivity"] <- 0
+# summary(data1$transitivity)
+
+data1_transitivity <- data1 %>%
+  group_by(round, showScore) %>% 
+  summarise(transitivity_mean = mean1(transitivity),
+            transitivity_se = se2(transitivity))
+
+tr_transitivity <- ggplot(data1_transitivity, aes(x = round, y = transitivity_mean,
+                                      linetype = factor(showScore))) +
+  geom_line() +
+  geom_errorbar(aes(ymin = transitivity_mean - transitivity_se,
+                    ymax = transitivity_mean + transitivity_se),
+                width=0, cex = 0.7, alpha = 0.3) +
+  labs(x = "Round", y = "Network transitivity",
+       linetype = "Wealth visibility") + 
+  ggtitle("c") +
+  scale_x_continuous(breaks = seq(0, 15, 2)) +
+  scale_y_continuous(breaks = seq(0, 1, 0.25), limits = c(0,1)) +
+  scale_linetype_manual(labels = c("Invisible", "Visible"),
+                        values = c("dashed", "solid")) + 
+  theme_classic() +
+  theme(legend.position = "none",
+        plot.title = element_text(size = 16, face = "bold"))
+
+# Proportion of cooperation
+data1_coop <- data1 %>%
+  filter(round != 0) %>% 
+  group_by(round, showScore) %>% 
+  summarise(coop_mean = mean(behavior_coop),
+            coop_se = se2(behavior_coop))
+
+tr_coop <- ggplot(data1_coop, aes(x = round, y = coop_mean,
+                                  linetype = factor(showScore))) +
+  geom_line() +
+  geom_errorbar(aes(ymin = coop_mean - coop_se,
+                    ymax = coop_mean + coop_se),
+                width=0, cex = 0.7, alpha = 0.3) +
+  labs(x = "Round", y = "Proportion of cooperation",
+       linetype = "Wealth visibility") + 
+  ggtitle("d") +
+  scale_x_continuous(breaks = seq(1, 15, 2)) +
+  scale_y_continuous(breaks = seq(0, 0.7, 0.1), limits = c(0,0.7)) +
+  scale_linetype_manual(labels = c("Invisible", "Visible"),
+                        values = c("dashed", "solid")) + 
+  theme_classic() +
+  theme(legend.position = "none",
+        plot.title = element_text(size = 16, face = "bold"))
+
+# Proportion of punishment
+data1_punish <- data1 %>%
+  filter(round != 0) %>%
+  group_by(round, showScore) %>%
+  summarise(punish_mean = mean(behavior_punish),
+            punish_se = se2(behavior_punish))
+
+tr_punish <- ggplot(data1_punish, aes(x = round, y = punish_mean,
+                                      linetype = factor(showScore))) +
+  geom_line() +
+  geom_errorbar(aes(ymin = punish_mean - punish_se,
+                    ymax = punish_mean + punish_se),
+                width=0, cex = 0.7, alpha = 0.3) +
+  labs(x = "Round", y = "Proportion of punishment",
+       linetype = "Wealth visibility") + 
+  ggtitle("e") +
+  scale_x_continuous(breaks = seq(1, 15, 2)) +
+  scale_y_continuous(breaks = seq(0, 0.3, 0.1), limits = c(0,0.3)) +
+  scale_linetype_manual(labels = c("Invisible", "Visible"),
+                        values = c("dashed", "solid")) + 
+  theme_classic() + 
+  theme(legend.position = "none",
+        plot.title = element_text(size = 16, face = "bold"))
+
+# Make a figure panel
+layout <- rbind(c(1, 1, 1),
+                c(2, 3, 4),
+                c(5, 6, NA))
+network_panel <- grid.arrange(legend,
+             tr_wealth + theme(legend.position = "none"),
+             tr_degree,tr_transitivity,
+             tr_coop, tr_punish,
+             layout_matrix = layout,
+             heights = c(.1, .45, .45))
+
+path_to_figures <- "~/Desktop/"
+ggsave(paste0(path_to_figures, "network_panel_2022_06_18.png"),
+       plot = network_panel, width = 20, height = 12, units = "cm")
+```
+
+# Figure 2: Density/rug plot of behavior time (log-scale) according to behavior types
+
+```{r}
+# Data preparation for rug plots
+data1_cc$ypos <- 0
+data1_cc$ypos2 <- 0 #for sub-plots
+data1_cc[behavior_coop==1, ypos:=0.06]
+data1_cc[behavior_defect==1, ypos:=0.03]
+data1_cc[conflict==1, ypos2:=0.1]
+xtabs(~ypos+behavior, data = data1_cc)
+
+d_plot <- data1_cc %>%
+  na.omit() %>%
+  ggplot(aes(x=behaviorTime_sec, colour=behavior)) +
+  geom_density(adjust = 2) +
+  theme_classic() +
+  labs(color = "Behavior") +
+  scale_x_log10(limits = c(1, 110),breaks = c(1, 10, 100)) +
+  scale_y_continuous(limits = c(0, 1.3)) + 
+  scale_color_manual(labels = c("Cooperation", "Defection", "Punishment"),
+                     values = c("orange2", "skyblue2", "red2")) +
+  guides(colour=guide_legend(title = NULL))
+
+d_plot_f <- d_plot + 
+  theme(axis.title = element_blank(),
+        axis.text = element_text(size = rel(1.3)),
+        legend.position = c(0.8, 0.8)) + 
+  geom_point(aes(x=behaviorTime_sec, y=ypos, colour=behavior),
+             position = position_jitter(width = 0.2, height = 0), 
+             alpha=0.03)
+```
+
+<!-- ## 3.1.2. Density plot of behavior time (log-scale) stratified by the prevalence of punishment and behavior -->
+
+```{r}
+#density plot (behavior: punishment)
+d_plot_conf_punish <- data1_cc[behavior=="P",] %>%
+  na.omit() %>%
+  ggplot(aes(x=behaviorTime_sec, colour=conflict)) +
+  geom_density(adjust = 2) +
+  theme_classic() +
+  ggtitle("Punishment") +
+  xlab("") +
+  ylab("") +
+  labs(color = "Prevalence \nof punishment (%)") +
+  scale_x_log10(limits = c(1, 110)) +
+  scale_y_continuous(limits = c(0, 1.3)) + 
+  scale_color_manual(labels = c("[0, 15]", "(15,100]"),
+                     values = c("red1", "red3"))
+
+d_plot_conf_punish_f <- d_plot_conf_punish + 
+  theme(axis.title = element_blank(),
+        axis.text = element_text(size = rel(1.3)),
+        plot.title = element_text(size = 15, face = "bold"),
+        legend.position = "right",
+        legend.title = element_text(size = 7)) +
+    geom_point(aes(x=behaviorTime_sec, y=ypos2, colour=conflict),
+             position = position_jitter(width = 0.2, height = 0), 
+             alpha=0.05)
+
+#density plot (behavior: defection)
+d_plot_conf_def <- data1_cc[behavior=="D",] %>%
+  na.omit() %>%
+  ggplot(aes(x=behaviorTime_sec, colour=conflict)) +
+  geom_density(adjust = 2) +
+  theme_classic() +
+  ggtitle("Defection") +
+  # xlab("") +
+  # ylab("") +
+  labs(color = "Prevalence \nof punishment (%)") +
+  scale_x_log10(limits = c(1, 110)) +
+  scale_y_continuous(limits = c(0, 1.3)) + 
+  scale_color_manual(labels = c("[0, 15]", "(15,100]"),
+                     values = c("skyblue1", "skyblue3"))
+
+d_plot_conf_def_f <- d_plot_conf_def + 
+  theme(axis.title = element_blank(),
+        axis.text = element_text(size = rel(1.3)),
+        plot.title = element_text(size = 15, face = "bold"),
+        legend.position = "right",
+        legend.title = element_text(size = 7)) +
+      geom_point(aes(x=behaviorTime_sec, y=ypos2, colour=conflict),
+             position = position_jitter(width = 0.2, height = 0), 
+             alpha=0.05)
+
+#density plot (behavior: cooperation)
+d_plot_conf_coop <- data1_cc[behavior=="C",] %>%
+  na.omit() %>%
+  ggplot(aes(x=behaviorTime_sec, colour=conflict)) +
+  geom_density(adjust = 2) +
+  theme_classic() +
+  ggtitle("Cooperation") +
+  # xlab("Decision Time (sec)") +
+  ylab("Density") +
+  labs(color = "Prevalence \nof punishment (%)") +
+  scale_x_log10(limits = c(1, 110)) +
+  scale_y_continuous(limits = c(0, 1.3)) + 
+  scale_color_manual(labels = c("[0, 15]", "(15,100]"),
+                     values = c("orange1", "orange3"))
+
+d_plot_conf_coop_f <- d_plot_conf_coop + 
+  theme(axis.title = element_blank(),
+        axis.text = element_text(size = rel(1.3)),
+        plot.title = element_text(size = 15, face = "bold"),
+        legend.position = "right",
+        legend.title = element_text(size = 7)) +
+      geom_point(aes(x=behaviorTime_sec, y=ypos2, colour=conflict),
+             position = position_jitter(width = 0.2, height = 0), 
+             alpha=0.05)
+```
+
+```{r, warning=FALSE}
+layout <- rbind(c(1, 2),
+                c(1, 3),
+                c(1, 4))
+fig_time_dens <- grid.arrange(d_plot_f, d_plot_conf_coop_f,
+                                     d_plot_conf_def_f,d_plot_conf_punish_f,
+                                     layout_matrix = layout,
+                              bottom = textGrob("Decision time (sec)",gp=gpar(fontsize=15)),
+                              left = textGrob("Density",gp=gpar(fontsize=15), rot = 90))
+
+data1_cc %>% group_by(behavior) %>%
+  summarize(mean_bt = mean(behaviorTime/1000),
+            median_bt = median(behaviorTime/1000))
+
+# ggsave(paste0(path_to_figures, "bt_2022_05_26.png"),
+#        plot = fig_time_dens, width = 20, height = 12, units = "cm")
+```
+
+# Figure 3: Demonstrating the threshold of punishment based on prevalence of punishment among alters in round *t-1*
+
+```{r}
+#prepare a data.frame to depict the box plot
+data1_p_cat1 = data1_cc[data1_cc$local_rate_punish_cat6==1,]
+data1_p_cat2 = data1_cc[data1_cc$local_rate_punish_cat6==2,]
+data1_p_cat3 = data1_cc[data1_cc$local_rate_punish_cat6==3,]
+data1_p_cat4 = data1_cc[data1_cc$local_rate_punish_cat6==4,]
+data1_p_cat5 = data1_cc[data1_cc$local_rate_punish_cat6==5,]
+data1_p_cat6 = data1_cc[data1_cc$local_rate_punish_cat6==6,]
+
+data_risk <- data.table(Risk_category=c(1:6), Risk = 0,
+                        LL = 0, UL = 0,
+                        Label = c("[0,5]", "(5, 10]", "(10, 15]",
+                                  "(15, 20]", "(20, 25]", "(25, 100]"),
+                        Obs = 0)
+for (i in 1:6) {
+  # tmp_lm <- lm(behavior_punish ~ 1, data = eval(rlang::parse_expr(paste0("data1_p_cat",1))))
+  tmp_lm <- lm(behavior_punish ~ 1, data = eval(rlang::parse_expr(paste0("data1_p_cat",i))))
+  
+  data_risk[i, Risk:= tmp_lm$coefficients]
+  data_risk[i, LL:= tmp_lm$coefficients - coef(summary(tmp_lm))[, "Std. Error"]]
+  data_risk[i, UL:= tmp_lm$coefficients + coef(summary(tmp_lm))[, "Std. Error"]]
+  data_risk[i, Obs:= nrow(eval(rlang::parse_expr(paste0("data1_p_cat",i))))]
+}
+
+data_risk
+
+#box plot
+fig_risk <- ggplot(
+  data=data_risk,
+  aes(x = Risk_category, y = Risk*100, 
+      ymin = LL*100, ymax = UL*100)) +
+  geom_bar(data=data_risk,
+           stat = "identity",alpha= 0.5) +
+  geom_errorbar(aes(ymin = LL*100, ymax = UL*100), width=0, cex = 0.7) +
+  theme_classic() +
+  ylab("Probability of \npunishment behavior (%)") +
+  scale_y_continuous(breaks=seq(0,20,by=2.5)) +
+  xlab('\nPrevalence of punishment behavior \nin the previous round (%)') +
+  scale_x_discrete(limits=c("[0,5]\n\n 5251", "(5, 10]\n\n 219", "(10, 15]\n\n 523",
+                            "(15, 20]\n\n 440", "(20, 25]\n\n 212", "(25, 100]\n\n 273")) + 
+  theme(legend.position= "none",
+        panel.grid.minor.x = element_blank(),
+        axis.title = element_text(size = 18),
+        axis.text = element_text(size = 15),
+        strip.text = element_text(face = "bold", size = rel(1.5)),
+        strip.background = element_blank())
+# ggsave(paste0(path_to_figures, "punish_rate.png"),
+#        plot = fig_risk, width = 20, height = 12, units = "cm")
+#        
+
+fig_risk
+```
+
+# Regression Models (for supplement)
 
 We use logistic mixed effects models controlling for clustering by game and player and account for round by round variation by including an indicator variable for each individual game round.
 
-### Model 1: Choosing punishment vs. wealth visibility
+## Model 1a: Choosing punishment vs. wealth visibility
 
 ```{r}
 m1 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag+ factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
@@ -145,7 +601,27 @@ tab_m1 = cbind(Est = fixef(m1), LL = fixef(m1) - 1.96 * se, UL = fixef(m1) + 1.9
 round(exp(tab_m1), digits = 3)[1:11,]
 ```
 
-### Model 2: Using categorical local punish rate from the prior round (checking for threshold)
+## Model 1b.: Choosing cooperation vs. wealth visibility
+
+```{r}
+m1b = glmer(behavior_coop ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag+ factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+se = sqrt(diag(vcov(m1b)))
+# table of estimates with 95% CI
+tab_m1b = cbind(Est = fixef(m1b), LL = fixef(m1b) - 1.96 * se, UL = fixef(m1b) + 1.96 * se)
+round(exp(tab_m1b), digits = 3)[1:11,]
+```
+
+## Model 1c.: Choosing defection vs. wealth visibility
+
+```{r}
+m1c = glmer(behavior_defect ~ showScore + age + gender + behavior_coop_lag + local_rate_defect_lag + behavior_defect_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag+ factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+se = sqrt(diag(vcov(m1c)))
+# table of estimates with 95% CI
+tab_m1c = cbind(Est = fixef(m1c), LL = fixef(m1c) - 1.96 * se, UL = fixef(m1c) + 1.96 * se)
+round(exp(tab_m1c), digits = 3)[1:11,]
+```
+
+## Model 2: Using categorical local punish rate from the prior round (checking for threshold)
 
 ```{r}
 m2 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + factor(local_rate_punish_cat4) + cPayoffS_lag + degree_lag + happ + happ_lag + factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
@@ -155,82 +631,179 @@ tab_m2= cbind(Est = fixef(m2), LL = fixef(m2) - 1.96 * se, UL = fixef(m2) + 1.96
 round(exp(tab_m2), digits = 3)[1:16,]
 ```
 
-## Method 2 - Punishment should be more likely to be used by cooperators rather than defectors
-
-THe proportion of C->P should be greater than that of D->P.
+## Model 3: Evaluating ego and alters' behavior 2 rounds prior
 
 ```{r}
-# Looking at behavior change from coop -> not coop
-coop_to_not_coop = data1 %>% 
-  group_by(game, superid) %>% 
-  select(superid, game, round, behavior_coop, behavior_defect, behavior_punish, 
-         behavior_coop_lag, behavior_defect_lag, behavior_punish_lag,
-         local_rate_coop, local_rate_defect, local_rate_punish,
-         local_rate_coop_lag, local_rate_defect_lag, local_rate_punish_lag,
-         initial_coop, initial_defect, initial_punish, log_behaviorTime_lag) %>%
-  filter(round != 0, behavior_coop != 1, behavior_coop_lag == 1) 
+m3 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag2 + local_rate_coop_lag2 + behavior_punish_lag2 + local_rate_punish_lag2 + cPayoffS_lag + degree_lag + happ_lag + happ_lag2 + factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+se = sqrt(diag(vcov(m3)))
+# table of estimates with 95% CI
+tab_m3 = cbind(Est = fixef(m3), LL = fixef(m3) - 1.96 * se, UL = fixef(m3) + 1.96 * se)
+round(exp(tab_m3), digits = 3)[1:16,]
+```
 
-# Confirm that repetition and change differ in time
+## Model 4: Evaluating ego and alters' behavior 2 rounds prior, controlling for alter behavior 1 round prior
+
+```{r}
+m4 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + behavior_coop_lag2 + local_rate_coop_lag + local_rate_coop_lag2 + +behavior_punish_lag + behavior_punish_lag2 + local_rate_punish_lag + local_rate_punish_lag2 + cPayoffS_lag + degree_lag + happ_lag + happ_lag2 + factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+se = sqrt(diag(vcov(m4)))
+# table of estimates with 95% CI
+tab_m4 = cbind(Est = fixef(m4), LL = fixef(m4) - 1.96 * se, UL = fixef(m4) + 1.96 * se)
+round(exp(tab_m4), digits = 3)[1:16,]
+```
+
+# Stratified analysis: punish status by alter's previous decision
+
+We create a new outcome variable - "individual peace" - that takes into account both the ego's previous decision as well as alters' previous decisions.
+
+```{r}
+# Create individual peace variable: 1 if no alters in round t-1 punished and 
+# ego did not punish in round t-1
+data1 = data1 %>%
+  mutate(peace_individual = ifelse(local_rate_punish_lag == 0 & 
+                                     behavior_punish_lag == 0, 1, 0))
+
+
+# Create the list of alters by superid
+ndata_alters_list = ndata1 %>% 
+  select(round, game, starts_with("id")) %>%
+  filter(round != 0) %>%
+  mutate(across(starts_with("id"), ~100*game+parse_number(.))) %>%
+  rename(superid = id)
+
+names(ndata_alters_list)[4:20] = c("alter1", "alter2", "alter3", "alter4", 
+                                   "alter5", "alter6", "alter7", "alter8",
+                                   "alter9", "alter10", "alter11", "alter12",
+                                   "alter13", "alter14", "alter15", "alter16",
+                                   "alter17")
+
+ndata_alters_lag = ndata_alters_list
+names(ndata_alters_lag)[4:20] = paste0("lag_",names(ndata_alters_lag)[4:20])
+ndata_alters_lag$round = ndata_alters_lag$round+1
+
+ndata_alters = merge(ndata_alters_list, ndata_alters_lag, 
+                     by = c("superid", "round", "game")) %>%
+  arrange(superid, round)
+
+behaviors = data1 %>% 
+  filter(round != 0) %>%
+  select(superid, game, round, behavior_coop_lag, 
+         behavior_punish_lag, behavior_defect_lag)
+
+ndata_long_alters = ndata_alters %>%
+  select(superid, round, game, starts_with("lag")) %>%
+  pivot_longer(cols = starts_with("lag"), values_to = "alter_id") %>%
+  filter(is.na(alter_id) == F)
+
+pi_status = data1 %>% 
+  select(superid, game, round, peace_individual, behavior_punish_lag)
+
+punish_lag_status = data1 %>%
+  select(superid, game, round, behavior_punish)
+
+tdata_merged = ndata_long_alters %>%
+  left_join(pi_status, by = c("superid", "round", "game")) %>%
+  mutate(prev_round = round - 1) %>%
+  left_join(punish_lag_status, 
+            by = c("alter_id" = "superid", "game", "prev_round" = "round")) %>%
+  rename(alter_punish_lag = behavior_punish)
+```
+
+```{r}
+xtabs(~peace_individual + behavior_punish_lag + alter_punish_lag, tdata_merged)
+```
+
+```{r}
+tdata1 = tdata_merged %>%
+  group_by(superid, round, game) %>%
+  summarize(alter_punish_count = sum(alter_punish_lag)) %>%
+  mutate(alter_punish_flag = ifelse(alter_punish_count == 0, 0, 1)) %>%
+  left_join(pi_status, by = c("superid", "game", "round"))
+
+xtabs(~peace_individual + behavior_punish_lag + alter_punish_flag, tdata1)
+
+xtabs(~behavior_punish_lag + peace_individual, data1) # no punishers in prev round are in peace
+
+round(addmargins(prop.table(xtabs(~behavior_punish_lag + peace_individual + alter_punish_flag, tdata1))), 3)
+
+xtabs(~behavior_punish_lag + peace_individual + alter_punish_flag, tdata1)
+round(addmargins(prop.table(xtabs(~behavior_punish_lag + peace_individual + alter_punish_flag, tdata1))), 3)
+
+round(addmargins(prop.table(xtabs(~behavior_punish_lag + peace_individual + alter_punish_flag, tdata1), c(3, 1))), 3)
+```
+
+Based on above, we see that (280 decisions) 4.2% of those who did not punish previously and had no punishing alters did not end up in peace in the following round. Conversely, 5.6% of people who did not punish previously but had punishing neighbors did end up in peace.
+
+This suggests possible transport of punishing from new members of the social network, or spontaneous start of punishment by either new or old members. The 104 instances of alter punishment + ego no punishment suggests people may excise punishers from their network to establish peace (albeit at a very) low rate.
+
+We can then evaluate if there is a difference between those who become peaceful from war states or encounter punishment in previously peaceful scenarios.
+
+```{r}
+tdata_p2w = tdata1 %>% 
+  filter(alter_punish_flag == 0, 
+         behavior_punish_lag == 0, 
+         peace_individual == 0) %>%
+  mutate(peace_to_war = 1)
+
+tdata_w2p = tdata1 %>%
+  filter(alter_punish_flag == 1,
+         behavior_punish_lag == 0,
+         peace_individual == 1) %>%
+  mutate(war_to_peace = 1)
+
+tdata_p2w_to_merge = tdata_p2w %>%
+  select(superid, round, game, peace_to_war)
+tdata_w2p_to_merge = tdata_w2p %>%
+  select(superid, round, game, war_to_peace)
+  
 data2 = data1 %>% 
-  group_by(game, superid) %>% 
-  select(superid, game, round, behavior_coop, behavior_defect, behavior_punish, 
-         behavior_coop_lag, behavior_defect_lag, behavior_punish_lag,
-         local_rate_coop, local_rate_defect, local_rate_punish,
-         local_rate_coop_lag, local_rate_defect_lag, local_rate_punish_lag,
-         initial_coop, initial_defect, initial_punish, log_behaviorTime_lag) %>%
-  mutate(behavior = case_when(behavior_coop == 1 ~ "C",
-                              behavior_defect == 1 ~ "D",
-                              behavior_punish == 1 ~ "P"),
-         behavior_lag = case_when(behavior_coop_lag == 1 ~ "C",
-                                  behavior_defect_lag == 1 ~ "D",
-                                  behavior_punish_lag == 1 ~ "P"),
-         repetition = ifelse(behavior == behavior_lag, 1, 0))
+  as_tibble %>%
+  left_join(tdata_p2w_to_merge, by = c("superid", "round", "game")) %>%
+  left_join(tdata_w2p_to_merge, by = c("superid", "round", "game")) %>%
+  mutate(peace_to_war = case_when(peace_to_war == 1 ~ 1,
+                                  is.na(peace_to_war) == TRUE ~ 0),
+         war_to_peace = case_when(war_to_peace == 1 ~ 1,
+                                  is.na(war_to_peace) == TRUE ~ 0)) 
 
-# Yes, the mean time for repeated behavior is shorter
-data2 %>% 
-  na.omit() %>%
-  ggplot() + 
-  geom_boxplot(aes(x=factor(repetition, levels = c(1, 0)), 
-                   y = log_behaviorTime_lag))
+# crosstabs/boxplots
+names(data2)
 
-rep_times = data2 %>% na.omit() %>% 
-  filter(repetition == 1) %>% pull(log_behaviorTime_lag)
-diff_times = data2 %>% na.omit() %>% 
-  filter(repetition == 0) %>% pull(log_behaviorTime_lag)
-t.test(rep_times, diff_times) # confirmed
-```
+# age
+ggplot(data2) +
+  geom_boxplot(aes(x=factor(peace_to_war), y=age))
 
-```{r}
-# Is it different for C-C, D-D, P-P?
-data2 %>% 
-  mutate(rep_cats = case_when(behavior == "C" & behavior_lag == "C" ~ "C-C",
-                              behavior == "D" & behavior_lag == "D" ~ "D-D",
-                              behavior == "P" & behavior_lag == "P" ~ "P-P")) %>% 
-  na.omit() %>% 
-  ggplot() + 
-  geom_boxplot(aes(x = factor(rep_cats, levels = c("C-C", "D-D", "P-P")), 
-                   y = log_behaviorTime_lag))
-# the median punish time is a bit longer, but not by much - confirms repetition
-# is the fastest/easiest regardless of type
-```
+ggplot(data2) +
+  geom_boxplot(aes(x=factor(war_to_peace), y=age))
 
-```{r}
-# Are there differences for the different combinations? CD CP DC DP PC PD
-data2 = data2 %>% mutate(diff_cats = case_when(behavior == "C" & behavior_lag == "D" ~ "CD",
-                                       behavior == "C" & behavior_lag == "P" ~ "CP",
-                                       behavior == "D" & behavior_lag == "C" ~ "DC",
-                                       behavior == "D" & behavior_lag == "P" ~ "DP",
-                                       behavior == "P" & behavior_lag == "C" ~ "PC",
-                                       behavior == "P" & behavior_lag == "D" ~ "PD"))
+# gender
+prop.table(xtabs(~gender, data2)) #58% M vs. 31% F
+round(prop.table(xtabs(~gender + peace_to_war, data2)), 3) #the ratio is close
+round(prop.table(xtabs(~\gender + war_to_peace, data2)), 3) #same for war to peace
 
-data2 %>% 
-  na.omit() %>%
-  ggplot() +
-  geom_boxplot(aes(x=factor(diff_cats), y = log_behaviorTime_lag)) 
-# Going back to cooperation is faster
+# country
+round(prop.table(xtabs(~country_3cat + peace_to_war, data2)), 3) #1.6% for US, 0.9% for india
+round(prop.table(xtabs(~country_3cat + war_to_peace, data2)), 3) #0.3% for US, 0.6% for india
+# yes - makes sense, Indian players are more punishing compared to US players so 
+# there should be more peaceful converts among indian players 
 
-prop.table(xtabs(~diff_cats, data2))
+# wealth visibility
+round(prop.table(xtabs(~showScore + peace_to_war, data2)), 3)
+round(prop.table(xtabs(~showScore + war_to_peace, data2)), 3) #no major difference for wealth visibility
 
-table(data2_subset$diff_cats)
-chisq.test(c(169, 146), p =c(0.5, 0.5)) #not significant - while C->P is more prevalent compared to D->P, the difference is not significant
+# Initial score
+round(prop.table(xtabs(~factor(initial_score) + peace_to_war, data2)), 3)
+round(prop.table(xtabs(~factor(initial_score) + war_to_peace, data2)), 3)
+
+# Cumulative payoff - different ranges, but mean/median are close - probably due to sample size
+ggplot(data2) +
+  geom_boxplot(aes(x=factor(peace_to_war), y=cumulativePayoff))
+
+ggplot(data2) +
+  geom_boxplot(aes(x=factor(war_to_peace), y=cumulativePayoff))
+
+# degree - slightly high in war-to-peace transition (but not by much)
+ggplot(data2) +
+  geom_boxplot(aes(x=degree, y=factor(peace_to_war)))
+
+ggplot(data2) +
+  geom_boxplot(aes(x=degree, y=factor(war_to_peace)))
 ```
