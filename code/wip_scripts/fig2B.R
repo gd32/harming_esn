@@ -15,17 +15,17 @@ d_plot <- data1_cc %>%
   theme_classic() +
   labs(color = "Behavior") +
   scale_x_log10(limits = c(1, 110),breaks = c(1, 10, 100)) +
-  scale_y_continuous(limits = c(0, 1.3)) +
+  scale_y_continuous(limits = c(0, 1.3)) + 
   scale_color_manual(labels = c("Cooperation", "Defection", "Punishment"),
                      values = c("orange2", "skyblue2", "red2")) +
   guides(colour=guide_legend(title = NULL))
 
-d_plot_f <- d_plot +
+d_plot_f <- d_plot + 
   theme(axis.title = element_blank(),
         axis.text = element_text(size = rel(1.3)),
-        legend.position = c(0.8, 0.8)) +
+        legend.position = c(0.8, 0.8)) + 
   geom_point(aes(x=behaviorTime_sec, y=ypos, colour=behavior),
-             position = position_jitter(width = 0.2, height = 0),
+             position = position_jitter(width = 0.2, height = 0), 
              alpha=0.03)
 
 d_plot_oc = data1_cc %>%
@@ -36,15 +36,15 @@ d_plot_oc = data1_cc %>%
   theme_classic() +
   labs(color = "Behavior") +
   scale_x_log10(limits = c(1, 110),breaks = c(1, 10, 100)) +
-  scale_y_continuous(limits = c(0, 1.3)) +
+  scale_y_continuous(limits = c(0, 1.3)) + 
   scale_color_manual(labels = c("Cooperation", "Defection", "Punishment"),
                      values = c("orange2", "skyblue2", "red2")) +
-  guides(colour=guide_legend(title = NULL))+
+  guides(colour=guide_legend(title = NULL))+ 
   theme(axis.title = element_blank(),
         axis.text = element_text(size = rel(1.3)),
-        legend.position = "none") +
+        legend.position = "none") + 
   geom_point(aes(x=behaviorTime_sec, y=ypos, colour=behavior),
-             position = position_jitter(width = 0.2, height = 0),
+             position = position_jitter(width = 0.2, height = 0), 
              alpha=0.03)
 
 d_plot_ic = data1_cc %>%
@@ -55,30 +55,30 @@ d_plot_ic = data1_cc %>%
   theme_classic() +
   labs(color = "Behavior") +
   scale_x_log10(limits = c(1, 110),breaks = c(1, 10, 100)) +
-  scale_y_continuous(limits = c(0, 1.3)) +
+  scale_y_continuous(limits = c(0, 1.3)) + 
   scale_color_manual(labels = c("Cooperation", "Defection", "Punishment"),
                      values = c("orange2", "skyblue2", "red2")) +
   guides(colour=guide_legend(title = NULL))+
   theme(axis.title = element_blank(),
         axis.text = element_text(size = rel(1.3)),
-        legend.position = "none") +
+        legend.position = "none") + 
   geom_point(aes(x=behaviorTime_sec, y=ypos, colour=behavior),
-             position = position_jitter(width = 0.2, height = 0),
-             alpha=0.03)
+             position = position_jitter(width = 0.2, height = 0), 
+             alpha=0.03) 
 
 grid.arrange(d_plot_f,
              d_plot_oc,
              d_plot_ic,
              layout_matrix = layout)
 
-right_col = cowplot::plot_grid(d_plot_oc, d_plot_ic,
-                               ncol = 1,
+right_col = cowplot::plot_grid(d_plot_oc, d_plot_ic, 
+                               ncol = 1, 
                                labels = c("No conflict", "  In conflict"))
 
 
 fig2B = cowplot::plot_grid(d_plot_f, right_col, nrow = 1)
 
-grid.arrange(fig2B,
+grid.arrange(fig2B, 
              bottom = textGrob("Decision time (sec)",gp=gpar(fontsize=15)),
             left = textGrob("Density",gp=gpar(fontsize=15), rot = 90))
 
@@ -91,22 +91,22 @@ data1_cc %>%
   theme_classic() +
   labs(color = "Behavior") +
   scale_x_log10(limits = c(1, 110),breaks = c(1, 10, 100)) +
-  scale_y_continuous(limits = c(0, 1.3)) +
+  scale_y_continuous(limits = c(0, 1.3)) + 
   scale_color_manual(labels = c("Cooperation", "Defection", "Punishment"),
                      values = c("orange2", "skyblue2", "red2")) +
-  guides(colour=guide_legend(title = NULL))+
+  guides(colour=guide_legend(title = NULL))+ 
   theme(axis.title = element_blank(),
         axis.text = element_text(size = rel(1.3)),
-        legend.position = c(0.8, 0.8)) +
+        legend.position = c(0.8, 0.8)) + 
   geom_point(aes(x=behaviorTime_sec, y=ypos, colour=behavior),
-             position = position_jitter(width = 0.2, height = 0),
+             position = position_jitter(width = 0.2, height = 0), 
              alpha=0.03)
 
 data1_cc %>%
-  na.omit() %>%
+  na.omit() %>% 
   filter(behavior_punish == 1) %>%
   ggplot() +
   geom_density(aes(x=behaviorTime_sec, color = local_rate_punish_cat6)) +
-  scale_color_manual(labels = c("[0,5]", "(5, 10]", "(10, 15]",
+  scale_color_manual(labels = c("[0,5]", "(5, 10]", "(10, 15]", 
                                   "(15, 20]", "(20, 25]", "(25, 100]"),
                        values = c("green", "gold", "orange", "pink", "red", "darkred"))

@@ -1,0 +1,691 @@
+---
+title: "Classification of Punishment"
+author: "George Dewey"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse) # for data management
+library(patchwork)
+```
+
+# Classifying punishment into subtypes
+
+We classify punishment into 3 main subtypes:
+
+- inequality aversion: punishment to reduce perceived inequality
+  - 3rd party punishment is a subclass of this: punishment to promote cooperation that is not reactive
+- reactive: punishment in response to other punishment
+- unexplained: punishment that is neither reactive nor inequality aversion
+
+### Experiment 1 data
+
+```{r}
+# 4 main datasets: 
+# harmdata - cleaned raw individual-level data 
+# ldata4 - tie component of network-level data
+# ndata1 - node component of network-level data
+# data1 - main aggregated dataset including lag (rounds t-1, t-2, etc.) data
+
+
+mean1 = function(x) {mean(x,na.rm=TRUE)}
+median1 = function(x) {median(x, na.rm = TRUE)}
+
+# harmdata
+load("~/Documents/Projects/harming_esn/Data/exp1/harmdata.Rdata") #harmdata
+
+# ldata4
+load("~/Documents/Projects/harming_esn/Data/exp1/ldata4_0316X.Rdata")
+
+# ndata1
+load("~/Documents/Projects/harming_esn/Data/exp1/ndata_individual.Rdata")
+
+# data1
+load("~/Documents/Projects/harming_esn/Data/exp1/data1.Rdata") #data1
+
+data1 = data1 %>%
+  as_tibble()
+
+dim(data1 %>% filter(behavior_punish == 1)) #562 punishments
+```
+
+#### Punishment for inequality aversion 
+
+We define this subtype of punishment as punishment that occurs when the wealth of the ego is less than the average wealth of alters.
+
+```{r, message = F, warning = F}
+# first, get the list of alters
+ndata_alters_list = ndata1 %>% 
+  select(round, game, starts_with("id")) %>%
+  filter(round != 0) %>%
+  mutate(across(starts_with("id"), ~100*game+parse_number(.))) %>%
+  rename(superid = id)
+
+names(ndata_alters_list)[4:20] = c("alter1", "alter2", "alter3", "alter4", 
+                                   "alter5", "alter6", "alter7", "alter8",
+                                   "alter9", "alter10", "alter11", "alter12",
+                                   "alter13", "alter14", "alter15", "alter16",
+                                   "alter17")
+
+current_wealth = data1 %>% 
+  filter(round != 0) %>%
+  select(superid, game, round, cumulativePayoff, cPayoffS)
+
+ndata_long_alters = ndata_alters_list %>%
+  pivot_longer(cols = starts_with("alter"), values_to = ("alter_id")) %>%
+  filter(is.na(alter_id) == 0)
+
+ndata_long_alters_wealth = ndata_long_alters %>%
+  left_join(current_wealth, by = c("round", "game", "alter_id" = "superid")) %>%
+  group_by(superid, round, game) %>%
+  summarize(mean_alter_wealth = mean1(cPayoffS))
+
+data1_pc = data1 %>%
+  left_join(ndata_long_alters_wealth, by = c("round", "game", "superid")) %>%
+  mutate(wealth_inequal = ifelse(cPayoffS < mean_alter_wealth, 1, 0)) 
+  
+data1_pc %>%
+  filter(behavior_punish == 1, round > 0) %>%
+  group_by(wealth_inequal) %>%
+  summarize(n = n()) %>%
+  mutate(perc = n/sum(n)) %>%
+  filter(is.na(wealth_inequal) == 0)
+
+prop.test(x = c(270, 279), n = c(549, 549))
+```
+
+**49.6% wealth inequality vs 48% not due to wealth inequality**
+
+#### Reactive punishment
+
+Punishment in response to punishment, defined as punishment after an alter punished in last round regardless of punishing alters' current ties (so this means the punishing alter no longer needs to be tied to the ego after rewiring).
+
+```{r}
+data1_pc = 
+  data1_pc %>% 
+  mutate(reactive_p = ifelse(behavior_punish == 1 & local_rate_punish_lag !=0, 1, 0))
+
+data1_pc %>%
+  filter(behavior_punish == 1) %>%
+  mutate(reactive_p = ifelse(local_rate_punish_lag !=0, 1, 0)) %>%
+  group_by(reactive_p) %>%
+  summarize(n = n()) %>%
+  mutate(perc = n/sum(n)) %>%
+  filter(is.na(reactive_p) == 0)
+
+prop.test(x = c(359, 149), n = c(508, 508))
+```
+
+**26.5% reactive, 63.9% not (54 NAs)**
+
+#### Unexplained punishments
+
+Punishment that is not reactive or calculated.
+
+```{r}
+data1_pc_punishes = data1_pc %>%
+  filter(behavior_punish == 1)
+
+data1_pc_punishes %>%
+  filter(round <= 1) #49
+
+data1_pc_punishes %>%
+  filter(round > 1 & wealth_inequal == 0 & reactive_p == 0) #171
+
+# Cross tab
+xtabs(~reactive_p + wealth_inequal, data1_pc_punishes)
+```
+#### Calculating distribution of decision time by punishment status
+
+##### Inequality aversion
+
+```{r}
+# Statistics
+data1_pc %>%
+  mutate(behaviorTime_sec = behaviorTime/1000) %>%
+  group_by(wealth_inequal) %>%
+  filter(is.na(wealth_inequal) == F) %>%
+  summarize(mean_dt = mean1(behaviorTime_sec),
+            median_dt = median1(behaviorTime_sec),
+            max_dt = max(behaviorTime_sec, na.rm = T),
+            min_dt = min(behaviorTime_sec, na.rm = T),
+            range_dt = range(behaviorTime_sec, na.rm = T))
+```
+
+```{r}
+# Visual
+pun1 = data1_pc %>%
+  mutate(behaviorTime_sec = behaviorTime/1000) %>%
+  na.omit() %>%
+  filter(wealth_inequal %in% 0:1) %>%
+  ggplot(aes(x = behaviorTime_sec, color = as.factor(wealth_inequal))) +
+  geom_density(adjust = 2) + 
+  scale_x_log10(limits = c(1, 110),breaks = c(1, 10, 100)) +
+  scale_y_continuous(limits = c(0, 1.3)) +
+  scale_color_manual(labels = c("Inequality Aversion", "Other"),
+                     values = c("orange", "skyblue2")) +
+    theme(axis.title = element_blank(),
+        axis.text = element_text(size = rel(1.3)),
+        legend.position = "right") +
+  guides(colour=guide_legend(title = NULL))
+```   
+##### Reactive punishment
+
+```{r}
+# Statistics
+data1_pc %>%
+  mutate(behaviorTime_sec = behaviorTime/1000) %>%
+  group_by(reactive_p) %>%
+  filter(is.na(reactive_p) == F) %>%
+  summarize(mean_dt = mean1(behaviorTime_sec),
+            median_dt = median1(behaviorTime_sec),
+            max_dt = max(behaviorTime_sec, na.rm = T),
+            min_dt = min(behaviorTime_sec, na.rm = T),
+            range_dt = range(behaviorTime_sec, na.rm = T))
+```
+
+```{r}
+# Visual
+pun2 = data1_pc %>%
+  mutate(behaviorTime_sec = behaviorTime/1000) %>%
+  na.omit() %>%
+  filter(reactive_p %in% 0:1) %>%
+  ggplot(aes(x = behaviorTime_sec, color = as.factor(reactive_p))) +
+  geom_density(adjust = 2) + 
+  scale_x_log10(limits = c(1, 110),breaks = c(1, 10, 100)) +
+  scale_y_continuous(limits = c(0, 1.3)) +
+  scale_color_manual(labels = c("Reactive Punishment", "Other"),
+                     values = c("magenta", "skyblue2")) +  
+  theme(axis.title = element_blank(),
+        axis.text = element_text(size = rel(1.3)),
+        legend.position = "right") +
+  guides(colour=guide_legend(title = NULL))
+```   
+
+##### Unexplained punishment
+
+```{r}
+# Visual
+pun3 = data1_pc %>%
+  mutate(behaviorTime_sec = behaviorTime/1000,
+         unexplained_p = ifelse(behavior_punish == 1 & reactive_p == 0 & wealth_inequal == 0, 1, 0)) %>%
+  na.omit() %>%
+  filter(unexplained_p %in% 0:1) %>%
+  ggplot(aes(x = behaviorTime_sec, color = as.factor(unexplained_p))) +
+  geom_density(adjust = 2) + 
+  scale_x_log10(limits = c(1, 110),breaks = c(1, 10, 100)) +
+  scale_y_continuous(limits = c(0, 1.3)) +
+  scale_color_manual(labels = c("Unexplained Punishment", "Other"),
+                     values = c("darkgreen", "skyblue2")) +
+    theme(axis.title = element_blank(),
+        axis.text = element_text(size = rel(1.3)),
+        legend.position = "right") +
+  guides(colour=guide_legend(title = NULL))
+```   
+
+#### Combined figure
+
+```{r}
+# Create a 4-level variable: 1 = IA, 2 = Reactive, 3 = Unexpl., 4 = Other
+data1_pc = data1_pc %>%
+  mutate(
+    behaviorTime_sec = behaviorTime/1000,
+    unexplained_p = ifelse(behavior_punish == 1 & reactive_p == 0 & 
+                             wealth_inequal == 0, 1, 0),
+    pun_type = case_when(behavior_punish == 1 & wealth_inequal == 1 ~ 1,
+                         behavior_punish == 1 & reactive_p == 1 ~ 2,
+                         behavior_punish == 1 & unexplained_p == 1 ~ 3,
+                         TRUE ~ 4))
+
+# save the final data_pc
+# save(data1_pc, file = "~/Documents/Projects/harming_esn/code/exp1/data1_pc.Rdata")
+
+# Combined fig. - exp 1
+data1_pc %>% 
+  na.omit() %>%
+  ggplot(aes(x = behaviorTime_sec, color = as.factor(pun_type))) +
+  geom_density(adjust = 2) + 
+  scale_x_log10(limits = c(1, 110),breaks = c(1, 10, 100)) +
+  scale_y_continuous(limits = c(0, 1.3)) +
+  scale_color_manual(labels = c("IA", "RP", "UP", "Other"),
+                     values = c("#FFBF00", "#DE1A1A", "#29BF12", "#00A5CF")) +
+    theme(
+        axis.text = element_text(size = rel(1.3)),
+        legend.position = "right") +
+  guides(colour=guide_legend(title = NULL))+
+  xlab("Decision Time (s)") +
+  ylab("Density") + 
+  ggtitle("Distribution of decision times by punishment subtype - Exp. 1")
+```
+
+### Experiment 2 data
+
+```{r}
+load("~/Documents/Projects/harming_esn/data/exp2/ndata1_tp.Rdata")
+load("~/Documents/Projects/harming_esn/data/exp2/ldata4_tp.Rdata")
+load("~/Documents/Projects/harming_esn/data/exp2/tpdata.Rdata")
+
+tpdata = tpdata %>%
+  as_tibble()
+
+tpdata %>%
+  filter(behavior == "P") %>%
+  dim() #612 punishments
+```
+
+#### Instrumental punishment: punishing to reduce inequality defined as punishment that occurs when ego's wealth is lower than the mean wealth of alters
+
+```{r}
+# first, get the list of alters
+ndata_alters_list = ndata_tp %>% 
+  select(round, game, starts_with("id")) %>%
+  filter(round != 0) %>%
+  mutate(across(starts_with("id"), ~100*game+parse_number(.))) %>%
+  rename(superid = id)
+
+length(names(ndata_alters_list))
+
+names(ndata_alters_list)[4:17] = c("alter1", "alter2", "alter3", "alter4", 
+                                   "alter5", "alter6", "alter7", "alter8",
+                                   "alter9", "alter10", "alter11", "alter12",
+                                   "alter13", "alter14")
+
+current_wealth = tpdata %>% 
+  filter(round != 0) %>%
+  select(superid, game, round, cumulativePayoff, cPayoffS)
+
+ndata_long_alters = ndata_alters_list %>%
+  pivot_longer(cols = starts_with("alter"), values_to = ("alter_id")) %>%
+  filter(is.na(alter_id) == 0)
+
+ndata_long_alters_wealth = ndata_long_alters %>%
+  left_join(current_wealth, by = c("round", "game", "alter_id" = "superid")) %>%
+  group_by(superid, round, game) %>%
+  summarize(mean_alter_wealth = mean1(cPayoffS))
+
+tpdata_pc = tpdata %>%
+  left_join(ndata_long_alters_wealth, by = c("round", "game", "superid")) %>%
+  mutate(wealth_inequal = ifelse(cPayoffS < mean_alter_wealth, 1, 0)) 
+
+tpdata_pc %>%
+  filter(behavior=="P", round > 0,is.na(wealth_inequal) == 0) %>%
+  group_by(wealth_inequal) %>%
+  summarize(n = n()) %>%
+  mutate(perc = n/sum(n))
+
+# checking p-value
+prop.test(x = c(290, 312), n = c(290+312,  290+312))
+```
+
+**51.0% wealth inequality, 47.4% wealth equal**
+
+#### Reactive punishment: punishment in response to punishment defined as: punishment after an alter punished in last round
+
+```{r}
+tpdata_pc = 
+  tpdata_pc %>% 
+  mutate(reactive_p = ifelse(behavior == "P" & prev_local_rate_punish!=0, 1, 0))
+
+tpdata_pc %>%
+  filter(behavior == "P") %>%
+  group_by(reactive_p) %>%
+  summarize(n = n()) %>%
+  mutate(perc = n/sum(n))
+
+prop.test(c(310, 302), c(612, 612))
+```
+**49.3% reactive, 50.7% not**
+
+```{r}
+# 3rd party punishment - i.e.; reactive_p = 0 + wealth_inequal = 1
+
+tpdata_pc %>%
+  filter(behavior == "P") %>%
+  group_by(reactive_p, wealth_inequal) %>%
+  summarize(n= n()) %>%
+  filter(is.na(wealth_inequal) == 0) %>%
+  ungroup() %>%
+  mutate(perc = n/sum(n))
+
+# 23.3%?
+```
+
+
+#### Unexplained punishments - not reactive or calculated
+
+```{r}
+tpdata_pc %>%
+  filter(behavior == "P" & round <= 1) %>%
+  dim()
+
+tpdata_pc %>%
+  filter(behavior == "P" & round > 1 & wealth_inequal == 0 & reactive_p == 0) %>%
+  dim() 
+```
+
+```{r}
+# crosstabs
+xtabs(~wealth_inequal + reactive_p, tpdata_pc %>% filter(round > 1, behavior == "P"))
+tpdata_pc %>%
+  group_by(tp_on, behavior) %>%
+  filter(behavior %in% c("C", "D", "P")) %>%
+  summarize(n = n()) %>%
+  mutate(perc = n/sum(n),
+         total = sum(n))
+```
+
+```{r}
+# p-values
+# for C
+prop.test(x = c(837, 706), n = c(1580, 1629)) # p < 0.0001
+
+# for D
+prop.test(x = c(379, 684), n = c(1580, 1629)) # p < 0.0001
+
+# for P
+prop.test(x = c(373, 239), n = c(1580, 1629)) # p < 0.0001
+```
+
+```{r}
+tpdata_pc %>%
+  group_by(tp_on, behavior, wealth_inequal) %>%
+  filter(behavior %in% c("C", "D", "P"), is.na(wealth_inequal) == 0) %>%
+  summarize(n = n()) %>%
+  mutate(perc = n/sum(n),
+         total = sum(n)) %>%
+  filter(wealth_inequal == 1)
+
+171/1580 # tp off
+141/1629 # tp on
+
+prop.test(c(171, 141), c(1580, 1629))
+```
+
+```{r}
+tpdata_pc %>%
+  group_by(tp_on, behavior, reactive_p) %>%
+  filter(behavior %in% c("C", "D", "P"), is.na(reactive_p) == 0) %>%
+  summarize(n = n()) %>%
+  mutate(perc = n/sum(n),
+         total = sum(n)) %>%
+  filter(reactive_p == 1)
+
+200/1580
+102/1629
+
+prop.test(c(200, 102), c(1580, 1629))
+```
+
+```{r}
+tpdata_pc %>%
+  group_by(tp_on, behavior, wealth_inequal, reactive_p) %>%
+  filter(behavior %in% c("C", "D", "P"), is.na(wealth_inequal) == 0, is.na(reactive_p) == 0) %>%
+  summarize(n = n()) %>%
+  mutate(perc = n/sum(n),
+         total = sum(n)) %>%
+  filter(wealth_inequal == 0 & reactive_p == 0)
+
+106/1580 #6.71
+58/1629 #3.56
+
+prop.test(c(106, 56), c(1580, 1629))
+```
+
+#### Distributions of decision time
+
+#### Combined figure
+
+```{r, message = F, warning = F}
+# Create a 4-level variable: 1 = IA, 2 = Reactive, 3 = Unexpl., 4 = Other
+# here, we need 2 datasets - one for TP on, one for TP off
+
+tpdata_tpon = tpdata_pc %>%
+  filter(tp_on == 1) %>%
+  mutate(
+    behaviorTime_sec = behaviorTime/1000,
+    unexplained_p = ifelse(behavior == "P" & reactive_p == 0 & 
+                             wealth_inequal == 0, 1, 0),
+    pun_type = case_when(behavior == "P" & wealth_inequal == 1 ~ 1,
+                         behavior == "P" & reactive_p == 1 ~ 2,
+                         behavior == "P" & unexplained_p == 1 ~ 3,
+                         TRUE ~ 4))
+
+tpdata_tpoff = tpdata_pc %>%
+  filter(tp_on == 0) %>%
+  mutate(
+    behaviorTime_sec = behaviorTime/1000,
+    unexplained_p = ifelse(behavior == "P" & reactive_p == 0 & 
+                             wealth_inequal == 0, 1, 0),
+    pun_type = case_when(behavior == "P" & wealth_inequal == 1 ~ 1,
+                         behavior == "P" & reactive_p == 1 ~ 2,
+                         behavior == "P" & unexplained_p == 1 ~ 3,
+                         TRUE ~ 4))
+
+tpdata_pc = tpdata_pc %>% mutate(
+    behaviorTime_sec = behaviorTime/1000,
+    unexplained_p = ifelse(behavior == "P" & reactive_p == 0 & 
+                             wealth_inequal == 0, 1, 0),
+    pun_type = case_when(behavior == "P" & wealth_inequal == 1 ~ 1,
+                         behavior == "P" & reactive_p == 1 ~ 2,
+                         behavior == "P" & unexplained_p == 1 ~ 3,
+                         TRUE ~ 4))
+
+
+# save tpon and tpoff data
+# save(tpdata_tpon, file = "~/Documents/Projects/harming_esn/code/exp2/tpdata_tpon.Rdata")
+# save(tpdata_tpoff, file = "~/Documents/Projects/harming_esn/code/exp2/tpdata_tpoff.Rdata")
+# save(tpdata_pc, file = "~/Documents/Projects/harming_esn/code/exp2/tpdata_pc.Rdata")
+
+# Combined fig. - exp 2 (tp on)
+tpdata_tpon %>% 
+  na.omit() %>%
+  ggplot(aes(x = behaviorTime_sec, color = as.factor(pun_type))) +
+  geom_density(adjust = 2) + 
+  scale_x_log10(limits = c(1, 110),breaks = c(1, 10, 100)) +
+  scale_y_continuous(limits = c(0, 2)) +
+  scale_color_manual(labels = c("IA", "RP", "UP", "Other"),
+                     values = c("#FFBF00", "#DE1A1A", "#29BF12", "#00A5CF")) +
+    theme(
+        axis.text = element_text(size = rel(1.3)),
+        legend.position = "right") +
+  guides(colour=guide_legend(title = NULL))+
+  xlab("Decision Time (s)") +
+  ylab("Density") + 
+  ggtitle("Distribution of decision times by punishment subtype - Exp. 2 (TP on)")
+
+# Combined fig. - exp2 (tp off)
+tpdata_tpoff %>% 
+  na.omit() %>%
+  ggplot(aes(x = behaviorTime_sec, color = as.factor(pun_type))) +
+  geom_density(adjust = 2) + 
+  scale_x_log10(limits = c(1, 110),breaks = c(1, 10, 100)) +
+  scale_y_continuous(limits = c(0, 2)) +
+  scale_color_manual(labels = c("IA", "RP", "UP", "Other"),
+                     values = c("#FFBF00", "#DE1A1A", "#29BF12", "#00A5CF")) +
+    theme(
+        axis.text = element_text(size = rel(1.3)),
+        legend.position = "right") +
+  guides(colour=guide_legend(title = NULL))+
+  xlab("Decision Time (s)") +
+  ylab("Density") + 
+  ggtitle("Distribution of decision times by punishment subtype - Exp. 2 (TP off)")
+```
+
+### Punishment subtypes stratified by gender
+
+#### Females only
+
+```{r}
+# All punishment
+tpdata_pc %>%
+  group_by(tp_on, behavior) %>%
+  filter(behavior %in% c("C", "D", "P"), 
+         gender == "female") %>%
+  summarize(n = n()) %>%
+  mutate(perc = n/sum(n),
+         total = sum(n))
+
+dim(tpdata_pc %>% filter(behavior %in% c("C", "D", "P"), gender == "female"))
+105/573
+91/644
+
+prop.test(c(105, 91), c(573, 644)) #p = 0.056
+
+
+```
+
+```{r}
+# IA
+tpdata_pc %>%
+  group_by(tp_on, behavior, wealth_inequal) %>%
+  filter(behavior %in% c("C", "D", "P"), 
+         is.na(wealth_inequal) == 0,
+         gender == "female") %>%
+  summarize(n = n()) %>%
+  mutate(perc = n/sum(n),
+         total = sum(n)) %>%
+  filter(wealth_inequal == 1) 
+
+65/573 # tp off
+63/644 # tp on
+
+prop.test(c(65, 63), c(573, 644)) # p = 0.428
+```
+
+```{r}
+# RP
+tpdata_pc %>%
+  group_by(tp_on, behavior, reactive_p) %>%
+  filter(behavior %in% c("C", "D", "P"), 
+         is.na(reactive_p) == 0,
+         gender == "female") %>%
+  summarize(n = n()) %>%
+  mutate(perc = n/sum(n),
+         total = sum(n)) %>%
+  filter(reactive_p == 1) 
+
+67/573 # tp off
+35/644 # tp on
+
+prop.test(c(60, 33), c(573, 644)) # p = 0.00068
+```
+
+```{r}
+# UP
+tpdata_pc %>%
+  group_by(tp_on, behavior, wealth_inequal, reactive_p) %>%
+  filter(gender == "female", 
+         behavior %in% c("C", "D", "P"),
+         is.na(wealth_inequal) == 0, is.na(reactive_p) == 0) %>%
+  summarize(n = n()) %>%
+  mutate(perc = n/sum(n),
+         total = sum(n)) %>%
+  filter(wealth_inequal == 0 & reactive_p == 0)
+
+18/573 # tp off
+17/644 # tp on
+
+prop.test(c(18, 17), c(573, 644)) # p  = 0.726
+```
+
+```{r}
+# Table 1a - Females only
+library(kableExtra)
+
+table1a = tibble(
+  pun_type = c("All", "IA", "RP", "UP"),
+  tp_off = c(105/573, 65/573, 67/573, 18/573),
+  tp_on = c(91/644, 63/644, 35/644, 17/655),
+  p = c(0.056, 0.428, 0.001, 0.725)
+)
+
+table1a %>%
+  kbl(col.names = c("Punish Type", "TP off", "TP on", "p"),
+      caption = "Females") %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+#### Males only
+
+```{r}
+tpdata_pc %>%
+  group_by(tp_on, behavior) %>%
+  filter(behavior %in% c("C", "D", "P"), 
+         gender == "male") %>%
+  summarize(n = n()) %>%
+  mutate(perc = n/sum(n),
+         total = sum(n))
+
+233/859 #tp_off: 0.271
+114/618 #tp_on: 0.184
+
+prop.test(c(233, 114), c(859, 618)) #p = 0.00013
+```
+
+```{r}
+tpdata_pc %>%
+  group_by(tp_on, behavior, wealth_inequal) %>%
+  filter(behavior %in% c("C", "D", "P"), 
+         is.na(wealth_inequal) == 0,
+         gender == "male") %>%
+  summarize(n = n()) %>%
+  mutate(perc = n/sum(n),
+         total = sum(n)) %>%
+  filter(wealth_inequal == 1) 
+
+87/859 #tp_off: 0.101
+51/618 #tp_on: 0.083
+
+prop.test(c(87, 51), c(859, 618)) #p = 0.258
+```
+
+```{r}
+tpdata_pc %>%
+  group_by(tp_on, behavior, reactive_p) %>%
+  filter(behavior %in% c("C", "D", "P"), 
+         is.na(reactive_p) == 0,
+         gender == "male") %>%
+  summarize(n = n()) %>%
+  mutate(perc = n/sum(n),
+         total = sum(n)) %>%
+  filter(reactive_p == 1) 
+
+109/859 #tp_off: 0.127
+55/618 #tp_on: 0.089
+
+prop.test(c(109, 55), c(859, 618)) #p = 0.0276
+```
+
+```{r}
+tpdata_pc %>%
+  group_by(tp_on, behavior, wealth_inequal, reactive_p) %>%
+  filter(gender == "male", 
+         behavior %in% c("C", "D", "P"),
+         is.na(wealth_inequal) == 0, is.na(reactive_p) == 0) %>%
+  summarize(n = n()) %>%
+  mutate(perc = n/sum(n),
+         total = sum(n)) %>%
+  filter(wealth_inequal == 0 & reactive_p == 0)
+
+81/859 #tp_off: 0.094
+36/618 #tp_on: 0.058
+
+prop.test(c(81, 36), c(859, 618)) #p = 0.016
+```
+
+```{r}
+# Table 1b - Males only
+table1b = tibble(
+  pun_type = c("All", "IA", "RP", "UP"),
+  tp_off = c(233/859, 87/859, 109/859, 81/859),
+  tp_on = c(114/618, 51/618, 55/618, 36/618),
+  p = c(0.00013, 0.258, 0.0276, 0.016)
+)
+
+table1b %>%
+  kbl(col.names = c("Punish Type", "TP off", "TP on", "p"),
+      caption = "Males") %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```

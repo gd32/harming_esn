@@ -1,10 +1,17 @@
-## Stratified analysis of individual peace
+## Stratified analysis for harming in social networks
 
-# We want to stratify individual peace status by alter punish status
+# Individual peace (PART 1)
+# From the main text - individual peace is defined by not punishing and having
+# no punishing alters in a single round
+# We stratify individual peace status by alter punish status
+# 
+# Spontaneous vs. rational punishment (PART 2)
+# 
+# We define two types of punishment: spontaneous - not triggered by punishment
+# in local network vs. rational - in response to punishment in local network
+
 
 rm(list = ls())
-
-# Individual peace defined as not being a punisher + no one in the local network is a punisher.
 
 # Import functions and packages
 mean1 = function(x) {mean(x, na.rm = TRUE)}
@@ -18,6 +25,8 @@ load("~/Documents/Projects/harming_esn/Data/harmdata.Rdata") #harmdata
 load("~/Documents/Projects/harming_esn/Data/harming_jsons/ldata4_0316X.Rdata") #ldata4
 load("~/Documents/Projects/harming_esn/Data/ndata_individual.Rdata") #ndata1
 load("~/Documents/Projects/harming_esn/Data/data1.Rdata") #data1
+
+# PART 1
 
 # Regenerate the individual peace status
 data1 = data1 %>%
@@ -174,9 +183,77 @@ ggplot(data2) +
 
 ggplot(data2) +
   geom_boxplot(aes(x=degree, y=factor(war_to_peace)))
-
-
-## Can we understand what context leads to this behavior?
-
-tdata_merged %>%
   
+# PART 2
+# 
+# by definition, all round 1 P must be spontaneous (because no alter information is available)
+
+# First, stratify punishment by presence of punishing alters
+
+data1 %>% 
+  as_tibble() %>% 
+  filter(behavior_punish == 1) %>%
+  mutate(spontaneous_p = ifelse(behavior_punish == 1 & local_rate_punish_lag == 0, 1, 0)) %>%
+  summarize(perc_spontaneous = mean1(spontaneous_p)) #70% of punishment was spontaneous
+
+# so yes, there is less rational punishment
+
+data1 %>% 
+  as_tibble() %>% 
+  filter(behavior_punish == 1) %>%
+  mutate(spontaneous_p = case_when(round == 1 & behavior_punish == 1 ~ 1,
+                                   round != 1 & behavior_punish == 1 & local_rate_punish_lag == 0 ~ 1,
+                                   round != 1 & behavior_punish == 1 & local_rate_punish_lag != 0 ~ 0,
+                                   round != 1 & behavior_punish == 1 & is.na(local_rate_punish_lag) == 1 ~ 1),
+         behaviorTime_sec = behaviorTime/1000) %>%
+  group_by(spontaneous_p) %>%
+  summarize(mean_decision_time = mean1(behaviorTime_sec))
+
+data1_stratified_p = data1 %>% 
+  as_tibble() %>% 
+  filter(behavior_punish == 1) %>%
+  mutate(spontaneous_p = case_when(round == 1 & behavior_punish == 1 ~ 1,
+                                   round != 1 & behavior_punish == 1 & local_rate_punish_lag == 0 ~ 1,
+                                   round != 1 & behavior_punish == 1 & local_rate_punish_lag != 0 ~ 0,
+                                   round != 1 & behavior_punish == 1 & is.na(local_rate_punish_lag) == 1 ~ 1),
+         behaviorTime_sec = behaviorTime/1000) 
+
+spontaneous_p_times = data1_stratified_p %>% filter(spontaneous_p == 1) %>% select(behaviorTime_sec) %>% pull()
+rational_p_times = data1_stratified_p %>% filter(spontaneous_p == 0) %>% select(behaviorTime_sec) %>% pull()
+
+t.test(spontaneous_p_times, rational_p_times) # p = 0.03737
+
+# spontaneous p is slower
+
+data1 %>% 
+  as_tibble() %>% 
+  filter(round != 1, behavior_punish == 1) %>%
+  mutate(spontaneous_p = case_when) %>%
+  filter(is.na(spontaneous_p) == T) %>%
+  select(superid, round, game, behavior_punish, local_rate_punish_lag, spontaneous_p)
+
+# which behavior is fastest when the local environment is cooperative? which behavior is fastest when the local environment is punishing?
+
+data1 %>%
+  filter(local_rate_punish_lag > 0) %>%
+  mutate(behavior = case_when(behavior_coop == 1 ~ "C",
+                              behavior_defect == 1 ~ "D",
+                              behavior_punish == 1 ~ "P"),
+         behaviorTime_sec = behaviorTime/1000) %>%
+  group_by(behavior) %>%
+  filter(is.na(behavior) == F) %>%
+  summarize(mean_decision_time = mean1(behaviorTime_sec))
+# both C+D are slower than P
+
+# is cooperation fastest when cooperation is dominant?
+data1 %>%
+  filter(local_rate_coop_lag > 0.1) %>%
+  mutate(behavior = case_when(behavior_coop == 1 ~ "C",
+                              behavior_defect == 1 ~ "D",
+                              behavior_punish == 1 ~ "P"),
+         behaviorTime_sec = behaviorTime/1000) %>%
+  group_by(behavior) %>%
+  filter(is.na(behavior) == F) %>%
+  summarize(mean_decision_time = mean1(behaviorTime_sec))
+# coop is faster when cooperation is more available, punishment is even slower
+            

@@ -1,0 +1,411 @@
+---
+title: "Punishment Subtypes Modeling"
+author: "George Dewey"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse) # for data management
+library(data.table) # for table management
+library(reshape2) # for data management
+library(magrittr) # for data management
+library(lme4) # for mixed effects regression
+library(lmerTest) # for p-values in regression output
+library(reldist) # to calculate gini
+library(rgeolocate) # to convert IPs to country
+library(igraph) # for network analysis
+library(gtable) # for visualization
+library(grid) # for visualization
+library(ggsignif) # for error bars
+library(cowplot) # for visualization
+library(gridExtra) # for visualization
+library(reldist) # to calculate gini
+library(sjPlot) # for tables
+library(binom) # for generating confidence intervals
+library(broom.mixed) # for mixed effects models output
+library(kableExtra)
+
+mean1 = function(x) {mean(x,na.rm=TRUE)}
+median1 = function(x) {median(x, na.rm = TRUE)}
+```
+
+# Load data and preprocess
+
+```{r}
+#exp1
+load("~/Documents/Projects/harming_esn/code/exp1/data1_pc.Rdata")
+#exp2
+load("~/Documents/Projects/harming_esn/code/exp2/tpdata_pc.Rdata")
+
+tpdata_pc = tpdata_pc %>%
+  mutate(behavior_punish = ifelse(behavior == "P" & is.na(behavior) == 0, 1, 0),
+         behavior_coop = ifelse(behavior == "C" & is.na(behavior) == 0, 1, 0),
+         behavior_defect = ifelse(behavior == "D" & is.na(behavior) == 0, 1, 0))
+
+data_lag = tpdata_pc %>% select(superid, round, initial_score, payoff, 
+                                    cumulativePayoff, cPayoffS, WealthLevel, 
+                                    behavior_coop, local_rate_coop, 
+                                    behavior_defect, local_rate_defect, 
+                                    behavior_punish, local_rate_punish, 
+                                  degree, happ, behaviorTime)
+names(data_lag)[-c(1,2)] = paste0(names(data_lag)[-c(1,2)],"_lag")
+data_lag$round = data_lag$round + 1
+tpdata_pc = merge(x=tpdata_pc,y=data_lag,all.x=T,all.y=F,by=c("superid","round"))
+```
+
+## Experiment 1 Data - Models 8-11
+
+To show the main effect of the experimental condition (either `showScore` or `tp_on`), we use a shortened model. We regress using Experiment 1 data for proof of concept.
+
+### Model 8: All punishment in Exp. 1
+
+```{r}
+m8 = glmer(behavior_punish ~ showScore + age + gender + factor(round) + (1|game) + (1|superid), data = data1_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m8, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(4) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+### Model 9: IA in Exp. 1
+
+```{r}
+m9 = glmer(wealth_inequal ~ showScore + age + gender + factor(round) + (1|game) + (1|superid), data = data1_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m9, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(4) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+### Model 10: RP in Exp. 1
+
+```{r}
+m10 = glmer(reactive_p ~ showScore + age + gender + factor(round) + (1|game) + (1|superid), data = data1_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m10, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(4) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+### Model 11: UP in Exp. 1
+
+```{r}
+m11 = glmer(unexplained_p ~ showScore + age + gender + factor(round) + (1|game) + (1|superid), data = data1_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m11, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(4) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Experiment 2 Data - Models 12-15
+
+### Model 12: All punishment in Exp. 2
+
+```{r}
+tpdata_pc %>%
+  group_by(tp_on) %>%
+  summarize(perc_punish = mean1(behavior_punish))
+
+m12 = glmer(behavior_punish ~ tp_on + age + gender + factor(round) + (1|game) + (1|superid), data = tpdata_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m12, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(4) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+```{r}
+m12 = glmer(behavior_punish ~ tp_on + factor(round) + (1|game) + (1|superid), data = tpdata_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+tidy(m12, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(2) 
+```
+
+
+### Model 13: IA in Exp. 2
+
+```{r}
+m13 = glmer(wealth_inequal ~ tp_on + age + gender + factor(round) + (1|game) + (1|superid), data = tpdata_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m13, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(4) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+### Model 14: RP in Exp. 2
+
+```{r}
+m14 = glmer(reactive_p ~ tp_on + age + gender + factor(round) + (1|game) + (1|superid), data = tpdata_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m14, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(4) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+### Model 15: UP in Exp. 2
+
+```{r}
+m15 = glmer(unexplained_p ~ tp_on + age + gender + factor(round) + (1|game) + (1|superid), data = tpdata_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m15, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(4) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Experiment 2 Models, Stratified by Gender
+
+```{r}
+# Subset the data
+exp2m = tpdata_pc %>% filter(gender == "male")
+exp2f = tpdata_pc %>% filter(gender == "female")
+```
+
+### Model 12m: All punishment in Exp. 2 - Males only
+
+```{r}
+m12m = glmer(behavior_punish ~ tp_on + age + factor(round) + (1|game) + (1|superid), data = exp2m, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m12m, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(3) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+### Model 12f: All punishment in Exp. 2 - Females only
+
+```{r}
+m12f = glmer(behavior_punish ~ tp_on + age + factor(round) + (1|game) + (1|superid), data = exp2f, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m12f, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(3) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+### Model 13m: IA in Exp. 2 - Males only
+
+```{r}
+m13m = glmer(wealth_inequal ~ tp_on + age + factor(round) + (1|game) + (1|superid), data = exp2m, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m13m, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(3) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+### Model 13f: IA in Exp. 2 - Females only
+
+```{r}
+m13f = glmer(wealth_inequal ~ tp_on + age + factor(round) + (1|game) + (1|superid), data = exp2f, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m13f, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(3) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+### Model 14m: RP in Exp. 2 - Males only
+
+```{r}
+m14m = glmer(reactive_p ~ tp_on + age + factor(round) + (1|game) + (1|superid), data = exp2m, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m14m, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(3) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+### Model 14f: RP in Exp. 2 - Females only
+
+```{r}
+m14f = glmer(reactive_p ~ tp_on + age + factor(round) + (1|game) + (1|superid), data = exp2f, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m14f, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(3) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+### Model 15m: UP in Exp. 2 - Males only
+
+```{r}
+m15m = glmer(unexplained_p ~ tp_on + age  + factor(round) + (1|game) + (1|superid), data = exp2m, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m15m, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(3) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+### Model 15f: UP in Exp. 2 - Females only
+
+```{r}
+m15f = glmer(unexplained_p ~ tp_on + age + factor(round) + (1|game) + (1|superid), data = exp2f, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m15f, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(3) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Create Table 1, 1a, 1b
+
+### Table 1
+
+```{r}
+table1 = tibble(
+  pun_type = c("All Punishment", "IA", "RP", "UP"),
+  tp_off_percentage = c(373/1580, 171/1580, 200/1580, 106/1580),
+  tp_on_percentage = c(239/1629, 141/1629, 102/1629, 58/1629),
+  OR_tp = c("0.560 (0.3014, 1.0404)", "1.4091 (0.5231, 3.7959)", "0.5193 (0.2472, 1.0908)", "0.5969, (0.1993, 1.7874)"),
+  p = c(0.0666, 0.4976, 0.0835, 0.3565),
+)
+
+table1 %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  kbl(col.names = c("Punishment Type", "% no TP", "% TP", "$OR_{TP}$ (95% CI)", "p")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+### Table 1a - Females only
+
+```{r}
+table1a = tibble(
+  pun_type = c("All Punishment", "IA", "RP", "UP"),
+  tp_off_percentage = c(0.1832, 0.1134, 0.1169, 0.0314),
+  tp_on_percentage = c(0.1413, 0.0978, 0.0543, 0.0260),
+  OR_tp = c("0.6981	(0.3371, 1.4453)", "1.4860 (0.2999,	7.3632)", "0.4609	(0.2365, 0.898)", "0.7770	(0.2789, 2.1647)"),
+  p = c(0.333, 0.6276, 0.0228, 0.6294)
+)
+
+table1a %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  kbl(col.names = c("Punishment Type", "% no TP", "% TP", "$OR_{TP}$ (95% CI)", "p")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Table 1b - Males only
+
+```{r}
+table1a = tibble(
+  pun_type = c("All Punishment", "IA", "RP", "UP"),
+  tp_off_percentage = c(0.2712, 0.1012, 0.1269, 0.0943),
+  tp_on_percentage = c(0.1845, 0.0823, 0.0890, 0.0583),
+  OR_tp = c("0.4491	(0.1681, 1.1994)", "1.3573 (0.3860, 4.7727)", "0.4981	(0.1947,	1.2739)", "0.4614	(0.0961,	2.2149)	"),
+  p = c(0.1102, 0.6339, 0.1458, 0.3338)
+)
+
+table1a %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  kbl(col.names = c("Punishment Type", "% no TP", "% TP", "$OR_{TP}$ (95% CI)", "p")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
