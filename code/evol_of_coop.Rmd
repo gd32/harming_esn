@@ -82,6 +82,7 @@ prop.test(c(794, 735), c(1592, 1589))
 The test is statistically significant with p = 0.0448.
 
 #### Regression model for cooperation by speed of decision
+
 ```{r}
 tpdata_pc = tpdata_pc %>%
   mutate(fast_decision = ifelse(behaviorTime < median1(behaviorTime), 1, 0),
@@ -107,11 +108,42 @@ After adjusting for clustering and round, cooperation is slightly more likely wi
 ```{r}
 # All punishment
 tpdata_pc %>%
-  group_by(tp_on, behavior) %>%
+  mutate(early_rd = ifelse(round < 8, 1, 0)) %>%
+  group_by(tp_on, behavior, early_rd) %>%
   filter(behavior %in% c("C", "D", "P")) %>%
-  summarize(n = n()) %>%
-  mutate(perc = n/sum(n),
-         total = sum(n))
+  summarize(n = n()) 
+
+tpdata_pc %>%
+  mutate(early_rd = ifelse(round < 8 , 1, 0))  %>%
+  filter(early_rd == 0) %>%
+  group_by(tp_on) %>%
+  summarize(n=n())
+
+tpdata_pc %>%
+  mutate(early_rd = ifelse(round < 8, 1, 0)) %>%
+  group_by(tp_on, behavior, early_rd) %>%
+  filter(behavior %in% c("C", "D", "P"), early_rd == 1) %>%
+  summarize(n = n())  %>%
+  ungroup() %>%
+  group_by(tp_on) %>%
+  mutate(perc = n/sum(n))
+
+# early tp_off = 916, early tp_on = 959
+# 
+# late tp_off = 834, late tp_off = 814
+# 
+# early tp off C: 412/916 = 
+```
+
+```{r}
+tpdata_pc %>%
+  mutate(early_rd = ifelse(round < 8, 1, 0)) %>%
+  group_by(tp_on, behavior, early_rd) %>%
+  filter(behavior %in% c("C", "D", "P"), early_rd == 0) %>%
+  summarize(n = n())  %>%
+  ungroup() %>%
+  group_by(tp_on) %>%
+  mutate(perc = n/sum(n))
 ```
 
 Under time pressure, cooperation occurred 43.3% of the time, compared to 53.0% of the time without time pressure. So in our data, we do not see the same increase in cooperation under time pressure as the Rand group did. However, we notice that the proportion of defections dramatically increased from 23.4% without time pressure to 42.0% with time pressure (both differences are strongly significant).
@@ -126,3 +158,86 @@ prop.test(c(837, 706), c(1580, 1629)) # p<0.0001
 # Defection
 prop.test(c(370, 684), c(1580, 1629)) # p<0.0001
 ```
+
+## Are people more likely to cooperate after being punished? 
+
+### Exp 1 data
+
+```{r}
+# Exp 1
+data1_pc = data1_pc %>%
+  mutate(behavior = case_when(behavior_punish == 1 ~ "P",
+                              behavior_coop == 1 ~ "C",
+                              behavior_defect == 1 ~ "D"))
+data1_pc %>%
+  mutate(behavior = case_when(behavior_punish == 1 ~ "P",
+                              behavior_coop == 1 ~ "C",
+                              behavior_defect == 1 ~ "D"),
+         last_punished = ifelse(local_rate_punish_lag > 0, 1, 0)) %>%
+  filter(is.na(behavior) == 0, is.na(last_punished) == 0) %>%
+  group_by(behavior, last_punished) %>%
+  summarize(n = n()) %>%
+  mutate(across(is.numeric, round, 3)) %>%
+  ungroup() %>%
+  group_by(last_punished) %>%
+  mutate(perc = n/sum(n)) %>%
+  arrange(last_punished)
+```
+
+We see that after people are punished, they are more likely to defect: cooperation 53% vs 40% after being punished, while defection increases from 42% to 53%.
+
+### Exp 2
+
+```{r}
+data_lag = tpdata_pc %>% select(superid, round, initial_score, payoff, 
+                                    cumulativePayoff, cPayoffS, WealthLevel, 
+                                    behavior_coop, local_rate_coop, 
+                                    behavior_defect, local_rate_defect, 
+                                    behavior_punish, local_rate_punish, 
+                                  degree, happ, behaviorTime)
+names(data_lag)[-c(1,2)] = paste0(names(data_lag)[-c(1,2)],"_lag")
+data_lag$round = data_lag$round + 1
+tpdata_pc = merge(x=tpdata_pc,y=data_lag,all.x=T,all.y=F,by=c("superid","round"))
+
+tpdata_pc %>% mutate(last_punished = ifelse(local_rate_punish_lag > 0, 1, 0)) %>%
+  filter(behavior %in% c("C", "D", "P"), is.na(last_punished) == 0) %>%
+  group_by(behavior, last_punished) %>%
+  summarize(n = n()) %>%
+  mutate(across(is.numeric, round, 3)) %>%
+  ungroup() %>%
+  group_by(last_punished) %>%
+  mutate(perc = n/sum(n)) %>%
+  arrange(last_punished)
+```
+
+In the TP experiment, people are more likely to cooperate after being punished (but only slightly - 48% vs 47%).
+
+```{r}
+tpdata_pc %>% 
+  mutate(last_punished = ifelse(local_rate_punish_lag > 0, 1, 0)) %>%
+  filter(behavior %in% c("C", "D", "P"), is.na(last_punished) == 0) %>%
+  group_by(behavior, last_punished, tp_on) %>%
+  summarize(n = n()) %>%
+  mutate(perc = n/sum(n)) %>%
+  arrange(behavior)
+
+tpdata_pc %>%
+    mutate(last_punished = ifelse(local_rate_punish_lag > 0, 1, 0)) %>%
+  group_by(last_punished, tp_on) %>%
+  summarize(n = n())
+  
+```
+
+```{r}
+280/575 #0.487
+370/816 #0.453
+
+490/899 #0.545
+272/685 #0.397
+
+prop.test(c(280, 370), c(575, 816))
+prop.test(c(490, 272), c(899, 685))
+```
+When time pressure is on, those who were punished cooperated 272/1629 (16.7%) times, compared to 370/1629 (22.7%) when not.
+
+When time pressure is off, those who were punished cooperated 490/1580 times (31.0%), compared to 280/1580 (17.7%) when not.

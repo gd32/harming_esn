@@ -308,10 +308,41 @@ tpdata_pc = tpdata %>%
   mutate(wealth_inequal = ifelse(cPayoffS < mean_alter_wealth, 1, 0)) 
 
 tpdata_pc %>%
+  filter(round > 0) %>%
+  group_by(behavior, tp_on) %>%
+  filter(behavior %in% c("C", "D", "P")) %>%
+  summarize(n=n()) %>%
+  mutate(perc = n/sum(n),
+         total = sum(n))
+```
+
+```{r}
+prop.test(c(373, 239), c(1580, 1629))
+```
+```{r}
+# logit model (crude)
+
+m_test = glm(behavior_punish ~ tp_on, data = tpdata_pc)
+
+
+# add age and gender to model
+# 
+# add round
+# 
+# use clustering w/ id
+# 
+# add game
+# 
+# 
+```
+
+```{r}
+tpdata_pc %>%
   filter(behavior=="P", round > 0,is.na(wealth_inequal) == 0) %>%
   group_by(wealth_inequal) %>%
   summarize(n = n()) %>%
-  mutate(perc = n/sum(n))
+  mutate(perc = n/sum(n),
+         total )
 
 # checking p-value
 prop.test(x = c(290, 312), n = c(290+312,  290+312))

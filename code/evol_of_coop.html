@@ -11,7 +11,7 @@
 
 <meta name="author" content="George Dewey" />
 
-<meta name="date" content="2022-12-20" />
+<meta name="date" content="2022-12-23" />
 
 <title>Evolution of Cooperation and Decision Time</title>
 
@@ -359,7 +359,7 @@ display: none;
 <h1 class="title toc-ignore">Evolution of Cooperation and Decision
 Time</h1>
 <h4 class="author">George Dewey</h4>
-<h4 class="date">2022-12-20</h4>
+<h4 class="date">2022-12-23</h4>
 
 </div>
 
@@ -480,23 +480,83 @@ significant level (p = 0.068).</p>
 cooperative? more reactive?</h3>
 <pre class="r"><code># All punishment
 tpdata_pc %&gt;%
-  group_by(tp_on, behavior) %&gt;%
+  mutate(early_rd = ifelse(round &lt; 8, 1, 0)) %&gt;%
+  group_by(tp_on, behavior, early_rd) %&gt;%
   filter(behavior %in% c(&quot;C&quot;, &quot;D&quot;, &quot;P&quot;)) %&gt;%
-  summarize(n = n()) %&gt;%
-  mutate(perc = n/sum(n),
-         total = sum(n))</code></pre>
-<pre><code>## `summarise()` has grouped output by &#39;tp_on&#39;. You can override using the
-## `.groups` argument.</code></pre>
+  summarize(n = n()) </code></pre>
+<pre><code>## `summarise()` has grouped output by &#39;tp_on&#39;, &#39;behavior&#39;. You can override using
+## the `.groups` argument.</code></pre>
+<pre><code>## # A tibble: 12 × 4
+## # Groups:   tp_on, behavior [6]
+##    tp_on behavior early_rd     n
+##    &lt;dbl&gt; &lt;chr&gt;       &lt;dbl&gt; &lt;int&gt;
+##  1     0 C               0   425
+##  2     0 C               1   412
+##  3     0 D               0   191
+##  4     0 D               1   179
+##  5     0 P               0   176
+##  6     0 P               1   197
+##  7     1 C               0   365
+##  8     1 C               1   341
+##  9     1 D               0   335
+## 10     1 D               1   349
+## 11     1 P               0   109
+## 12     1 P               1   130</code></pre>
+<pre class="r"><code>tpdata_pc %&gt;%
+  mutate(early_rd = ifelse(round &lt; 8 , 1, 0))  %&gt;%
+  filter(early_rd == 0) %&gt;%
+  group_by(tp_on) %&gt;%
+  summarize(n=n())</code></pre>
+<pre><code>## # A tibble: 2 × 2
+##   tp_on     n
+##   &lt;dbl&gt; &lt;int&gt;
+## 1     0   834
+## 2     1   814</code></pre>
+<pre class="r"><code>tpdata_pc %&gt;%
+  mutate(early_rd = ifelse(round &lt; 8, 1, 0)) %&gt;%
+  group_by(tp_on, behavior, early_rd) %&gt;%
+  filter(behavior %in% c(&quot;C&quot;, &quot;D&quot;, &quot;P&quot;), early_rd == 1) %&gt;%
+  summarize(n = n())  %&gt;%
+  ungroup() %&gt;%
+  group_by(tp_on) %&gt;%
+  mutate(perc = n/sum(n))</code></pre>
+<pre><code>## `summarise()` has grouped output by &#39;tp_on&#39;, &#39;behavior&#39;. You can override using
+## the `.groups` argument.</code></pre>
 <pre><code>## # A tibble: 6 × 5
 ## # Groups:   tp_on [2]
-##   tp_on behavior     n  perc total
-##   &lt;dbl&gt; &lt;chr&gt;    &lt;int&gt; &lt;dbl&gt; &lt;int&gt;
-## 1     0 C          837 0.530  1580
-## 2     0 D          370 0.234  1580
-## 3     0 P          373 0.236  1580
-## 4     1 C          706 0.433  1629
-## 5     1 D          684 0.420  1629
-## 6     1 P          239 0.147  1629</code></pre>
+##   tp_on behavior early_rd     n  perc
+##   &lt;dbl&gt; &lt;chr&gt;       &lt;dbl&gt; &lt;int&gt; &lt;dbl&gt;
+## 1     0 C               1   412 0.523
+## 2     0 D               1   179 0.227
+## 3     0 P               1   197 0.25 
+## 4     1 C               1   341 0.416
+## 5     1 D               1   349 0.426
+## 6     1 P               1   130 0.159</code></pre>
+<pre class="r"><code># early tp_off = 916, early tp_on = 959
+# 
+# late tp_off = 834, late tp_off = 814
+# 
+# early tp off C: 412/916 = </code></pre>
+<pre class="r"><code>tpdata_pc %&gt;%
+  mutate(early_rd = ifelse(round &lt; 8, 1, 0)) %&gt;%
+  group_by(tp_on, behavior, early_rd) %&gt;%
+  filter(behavior %in% c(&quot;C&quot;, &quot;D&quot;, &quot;P&quot;), early_rd == 0) %&gt;%
+  summarize(n = n())  %&gt;%
+  ungroup() %&gt;%
+  group_by(tp_on) %&gt;%
+  mutate(perc = n/sum(n))</code></pre>
+<pre><code>## `summarise()` has grouped output by &#39;tp_on&#39;, &#39;behavior&#39;. You can override using
+## the `.groups` argument.</code></pre>
+<pre><code>## # A tibble: 6 × 5
+## # Groups:   tp_on [2]
+##   tp_on behavior early_rd     n  perc
+##   &lt;dbl&gt; &lt;chr&gt;       &lt;dbl&gt; &lt;int&gt; &lt;dbl&gt;
+## 1     0 C               0   425 0.537
+## 2     0 D               0   191 0.241
+## 3     0 P               0   176 0.222
+## 4     1 C               0   365 0.451
+## 5     1 D               0   335 0.414
+## 6     1 P               0   109 0.135</code></pre>
 <p>Under time pressure, cooperation occurred 43.3% of the time, compared
 to 53.0% of the time without time pressure. So in our data, we do not
 see the same increase in cooperation under time pressure as the Rand
@@ -537,6 +597,120 @@ prop.test(c(370, 684), c(1580, 1629)) # p&lt;0.0001</code></pre>
 ##    prop 1    prop 2 
 ## 0.2341772 0.4198895</code></pre>
 </div>
+</div>
+</div>
+<div id="are-people-more-likely-to-cooperate-after-being-punished" class="section level2">
+<h2>Are people more likely to cooperate after being punished?</h2>
+<div id="exp-1-data" class="section level3">
+<h3>Exp 1 data</h3>
+<pre class="r"><code># Exp 1
+data1_pc = data1_pc %&gt;%
+  mutate(behavior = case_when(behavior_punish == 1 ~ &quot;P&quot;,
+                              behavior_coop == 1 ~ &quot;C&quot;,
+                              behavior_defect == 1 ~ &quot;D&quot;))
+data1_pc %&gt;%
+  mutate(behavior = case_when(behavior_punish == 1 ~ &quot;P&quot;,
+                              behavior_coop == 1 ~ &quot;C&quot;,
+                              behavior_defect == 1 ~ &quot;D&quot;),
+         last_punished = ifelse(local_rate_punish_lag &gt; 0, 1, 0)) %&gt;%
+  filter(is.na(behavior) == 0, is.na(last_punished) == 0) %&gt;%
+  group_by(behavior, last_punished) %&gt;%
+  summarize(n = n()) %&gt;%
+  mutate(across(is.numeric, round, 3)) %&gt;%
+  ungroup() %&gt;%
+  group_by(last_punished) %&gt;%
+  mutate(perc = n/sum(n)) %&gt;%
+  arrange(last_punished)</code></pre>
+<pre><code>## `summarise()` has grouped output by &#39;behavior&#39;. You can override using the
+## `.groups` argument.</code></pre>
+<pre><code>## Warning: Predicate functions must be wrapped in `where()`.
+## 
+##   # Bad
+##   data %&gt;% select(is.numeric)
+## 
+##   # Good
+##   data %&gt;% select(where(is.numeric))
+## 
+## ℹ Please update your code.
+## This message is displayed once per session.</code></pre>
+<pre><code>## # A tibble: 6 × 4
+## # Groups:   last_punished [2]
+##   behavior last_punished     n   perc
+##   &lt;chr&gt;            &lt;dbl&gt; &lt;dbl&gt;  &lt;dbl&gt;
+## 1 C                    0  3632 0.529 
+## 2 D                    0  2869 0.418 
+## 3 P                    0   359 0.0523
+## 4 C                    1   863 0.400 
+## 5 D                    1  1148 0.531 
+## 6 P                    1   149 0.0690</code></pre>
+<p>We see that after people are punished, they are more likely to
+defect: cooperation 53% vs 40% after being punished, while defection
+increases from 42% to 53%.</p>
+</div>
+<div id="exp-2" class="section level3">
+<h3>Exp 2</h3>
+<pre class="r"><code>data_lag = tpdata_pc %&gt;% select(superid, round, initial_score, payoff, 
+                                    cumulativePayoff, cPayoffS, WealthLevel, 
+                                    behavior_coop, local_rate_coop, 
+                                    behavior_defect, local_rate_defect, 
+                                    behavior_punish, local_rate_punish, 
+                                  degree, happ, behaviorTime)
+names(data_lag)[-c(1,2)] = paste0(names(data_lag)[-c(1,2)],&quot;_lag&quot;)
+data_lag$round = data_lag$round + 1
+tpdata_pc = merge(x=tpdata_pc,y=data_lag,all.x=T,all.y=F,by=c(&quot;superid&quot;,&quot;round&quot;))
+
+tpdata_pc %&gt;% mutate(last_punished = ifelse(local_rate_punish_lag &gt; 0, 1, 0)) %&gt;%
+  filter(behavior %in% c(&quot;C&quot;, &quot;D&quot;, &quot;P&quot;), is.na(last_punished) == 0) %&gt;%
+  group_by(behavior, last_punished) %&gt;%
+  summarize(n = n()) %&gt;%
+  mutate(across(is.numeric, round, 3)) %&gt;%
+  ungroup() %&gt;%
+  group_by(last_punished) %&gt;%
+  mutate(perc = n/sum(n)) %&gt;%
+  arrange(last_punished)</code></pre>
+<pre><code>## `summarise()` has grouped output by &#39;behavior&#39;. You can override using the
+## `.groups` argument.</code></pre>
+<pre><code>## # A tibble: 6 × 4
+## # Groups:   last_punished [2]
+##   behavior last_punished     n  perc
+##   &lt;chr&gt;            &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt;
+## 1 C                    0   650 0.473
+## 2 D                    0   453 0.330
+## 3 P                    0   271 0.197
+## 4 C                    1   762 0.483
+## 5 D                    1   528 0.335
+## 6 P                    1   288 0.183</code></pre>
+<p>In the TP experiment, people are more likely to cooperate after being
+punished (but only slightly - 48% vs 47%).</p>
+<pre class="r"><code>tpdata_pc %&gt;% 
+  mutate(last_punished = ifelse(local_rate_punish_lag &gt; 0, 1, 0)) %&gt;%
+  filter(behavior %in% c(&quot;C&quot;, &quot;D&quot;, &quot;P&quot;), is.na(last_punished) == 0) %&gt;%
+  group_by(behavior, last_punished, tp_on) %&gt;%
+  summarize(n = n()) %&gt;%
+  mutate(perc = n/sum(n)) %&gt;%
+  arrange(behavior)</code></pre>
+<pre><code>## `summarise()` has grouped output by &#39;behavior&#39;, &#39;last_punished&#39;. You can
+## override using the `.groups` argument.</code></pre>
+<pre><code>## # A tibble: 12 × 5
+## # Groups:   behavior, last_punished [6]
+##    behavior last_punished tp_on     n  perc
+##    &lt;chr&gt;            &lt;dbl&gt; &lt;dbl&gt; &lt;int&gt; &lt;dbl&gt;
+##  1 C                    0     0   280 0.431
+##  2 C                    0     1   370 0.569
+##  3 C                    1     0   490 0.643
+##  4 C                    1     1   272 0.357
+##  5 D                    0     0   132 0.291
+##  6 D                    0     1   321 0.709
+##  7 D                    1     0   213 0.403
+##  8 D                    1     1   315 0.597
+##  9 P                    0     0   150 0.554
+## 10 P                    0     1   121 0.446
+## 11 P                    1     0   191 0.663
+## 12 P                    1     1    97 0.337</code></pre>
+<p>When time pressure is on, those who were punished cooperated 272/1629
+(16.7%) times, compared to 370/1629 (22.7%) when not.</p>
+<p>When time pressure is off, those who were punished cooperated
+490/1580 times (31.0%), compared to 280/1580 (17.7%) when not.</p>
 </div>
 </div>
 

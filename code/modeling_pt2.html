@@ -11,7 +11,7 @@
 
 <meta name="author" content="George Dewey" />
 
-<meta name="date" content="2022-12-20" />
+<meta name="date" content="2022-12-22" />
 
 <title>Punishment Subtypes Modeling</title>
 
@@ -582,7 +582,7 @@ display: none;
 
 <h1 class="title toc-ignore">Punishment Subtypes Modeling</h1>
 <h4 class="author">George Dewey</h4>
-<h4 class="date">2022-12-20</h4>
+<h4 class="date">2022-12-22</h4>
 
 </div>
 
@@ -608,6 +608,139 @@ data_lag = tpdata_pc %&gt;% select(superid, round, initial_score, payoff,
 names(data_lag)[-c(1,2)] = paste0(names(data_lag)[-c(1,2)],&quot;_lag&quot;)
 data_lag$round = data_lag$round + 1
 tpdata_pc = merge(x=tpdata_pc,y=data_lag,all.x=T,all.y=F,by=c(&quot;superid&quot;,&quot;round&quot;))</code></pre>
+<div id="model-testing" class="section level2">
+<h2>Model testing</h2>
+<pre class="r"><code># logit model (crude)
+m_test = glm(behavior_punish ~ tp_on, data = tpdata_pc)
+tidy(m_test, conf.int = T, exponentiate = T) %&gt;%
+  rename(Term = term, Estimate = estimate, LL = conf.low, UL = conf.high, p = p.value) %&gt;%
+  select(Term, Estimate, LL, UL, p) %&gt;%
+  mutate(across(is.numeric, round, 4))</code></pre>
+<pre><code>## Warning: Predicate functions must be wrapped in `where()`.
+## 
+##   # Bad
+##   data %&gt;% select(is.numeric)
+## 
+##   # Good
+##   data %&gt;% select(where(is.numeric))
+## 
+## ℹ Please update your code.
+## This message is displayed once per session.</code></pre>
+<pre><code>## # A tibble: 2 × 5
+##   Term        Estimate    LL    UL     p
+##   &lt;chr&gt;          &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt;
+## 1 (Intercept)    1.24  1.22  1.26      0
+## 2 tp_on          0.925 0.902 0.948     0</code></pre>
+<pre class="r"><code># add age and gender to model
+m_test2 = glm(behavior_punish ~ tp_on + gender + age, data = tpdata_pc)
+summary(m_test2)</code></pre>
+<pre><code>## 
+## Call:
+## glm(formula = behavior_punish ~ tp_on + gender + age, data = tpdata_pc)
+## 
+## Deviance Residuals: 
+##      Min        1Q    Median        3Q       Max  
+## -0.34406  -0.23735  -0.16799  -0.08711   0.96624  
+## 
+## Coefficients:
+##              Estimate Std. Error t value Pr(&gt;|t|)    
+## (Intercept)  0.406991   0.033545  12.133  &lt; 2e-16 ***
+## tp_on       -0.063778   0.015062  -4.234 2.37e-05 ***
+## gendermale   0.027524   0.015813   1.741   0.0819 .  
+## age         -0.005335   0.000756  -7.057 2.14e-12 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## (Dispersion parameter for gaussian family taken to be 0.1534775)
+## 
+##     Null deviance: 436.17  on 2759  degrees of freedom
+## Residual deviance: 422.98  on 2756  degrees of freedom
+##   (763 observations deleted due to missingness)
+## AIC: 2665.7
+## 
+## Number of Fisher Scoring iterations: 2</code></pre>
+<pre class="r"><code>tidy(m_test2, conf.int = T) %&gt;%
+  rename(Term = term, Estimate = estimate, LL = conf.low, UL = conf.high, p = p.value) %&gt;%
+  select(Term, Estimate, LL, UL, p) %&gt;%
+  mutate(across(is.numeric, round, 4))</code></pre>
+<pre><code>## # A tibble: 4 × 5
+##   Term        Estimate      LL      UL      p
+##   &lt;chr&gt;          &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;  &lt;dbl&gt;
+## 1 (Intercept)   0.407   0.341   0.473  0     
+## 2 tp_on        -0.0638 -0.0933 -0.0343 0     
+## 3 gendermale    0.0275 -0.0035  0.0585 0.0819
+## 4 age          -0.0053 -0.0068 -0.0039 0</code></pre>
+<pre class="r"><code># add round
+m_test3 = glm(behavior_punish ~ tp_on + gender + age + factor(round), data = tpdata_pc)
+tidy(m_test3, conf.int = T) %&gt;%
+  rename(Term = term, Estimate = estimate, LL = conf.low, UL = conf.high, p = p.value) %&gt;%
+  select(Term, Estimate, LL, UL, p) %&gt;%
+  mutate(across(is.numeric, round, 4)) </code></pre>
+<pre><code>## # A tibble: 18 × 5
+##    Term            Estimate      LL      UL      p
+##    &lt;chr&gt;              &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;  &lt;dbl&gt;
+##  1 (Intercept)       0.433   0.348   0.519  0     
+##  2 tp_on            -0.0638 -0.0933 -0.0343 0     
+##  3 gendermale        0.0275 -0.0035  0.0585 0.0819
+##  4 age              -0.0053 -0.0068 -0.0039 0     
+##  5 factor(round)2    0.0163 -0.0637  0.0964 0.690 
+##  6 factor(round)3    0      -0.0801  0.0801 1     
+##  7 factor(round)4    0.0109 -0.0692  0.0909 0.790 
+##  8 factor(round)5   -0.0054 -0.0855  0.0746 0.894 
+##  9 factor(round)6   -0.0217 -0.102   0.0583 0.595 
+## 10 factor(round)7   -0.0543 -0.134   0.0257 0.183 
+## 11 factor(round)8   -0.0761 -0.156   0.004  0.0626
+## 12 factor(round)9   -0.0598 -0.140   0.0203 0.143 
+## 13 factor(round)10  -0.0109 -0.0909  0.0692 0.790 
+## 14 factor(round)11  -0.0163 -0.0964  0.0637 0.690 
+## 15 factor(round)12  -0.0272 -0.107   0.0529 0.506 
+## 16 factor(round)13  -0.0543 -0.134   0.0257 0.183 
+## 17 factor(round)14  -0.0598 -0.140   0.0203 0.143 
+## 18 factor(round)15  -0.0326 -0.113   0.0474 0.425</code></pre>
+<pre class="r"><code># use clustering w/ id
+m_test4 = glmer(behavior_punish ~ tp_on + age + gender + factor(round) + (1|superid), data = tpdata_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c(&quot;bobyqa&quot;), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+tidy(m_test4, conf.int = T) %&gt;%
+  rename(Term = term, Estimate = estimate, LL = conf.low, UL = conf.high, p = p.value) %&gt;%
+  select(Term, Estimate, LL, UL, p) %&gt;%
+  mutate(across(is.numeric, round, 4)) %&gt;%
+  head(4)</code></pre>
+<pre><code>## # A tibble: 4 × 5
+##   Term        Estimate      LL      UL      p
+##   &lt;chr&gt;          &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;  &lt;dbl&gt;
+## 1 (Intercept)   0.269  -1.10    1.63   0.700 
+## 2 tp_on        -0.590  -1.17   -0.0072 0.0472
+## 3 age          -0.048  -0.0783 -0.0178 0.0018
+## 4 gendermale    0.0769 -0.531   0.685  0.804</code></pre>
+<pre class="r"><code># add game
+m_test5 = glmer(behavior_punish ~ tp_on + age + gender + factor(round) + (1|superid) + (1|game), data = tpdata_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c(&quot;bobyqa&quot;), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+tidy(m_test5, conf.int = T) %&gt;%
+  rename(Term = term, Estimate = estimate, LL = conf.low, UL = conf.high, p = p.value) %&gt;%
+  select(Term, Estimate, LL, UL, p) %&gt;%
+  mutate(across(is.numeric, round, 4)) %&gt;%
+  head(4)</code></pre>
+<pre><code>## # A tibble: 4 × 5
+##   Term        Estimate      LL      UL      p
+##   &lt;chr&gt;          &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;  &lt;dbl&gt;
+## 1 (Intercept)   0.280  -1.10    1.66   0.691 
+## 2 tp_on        -0.580  -1.20    0.0396 0.0666
+## 3 age          -0.048  -0.0785 -0.0176 0.002 
+## 4 gendermale    0.0672 -0.539   0.673  0.828</code></pre>
+<pre class="r"><code># add game
+m_test6 = glmer(behavior_punish ~ tp_on + factor(round) + (1|superid) + (1|game), data = tpdata_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c(&quot;bobyqa&quot;), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+tidy(m_test6, conf.int = T) %&gt;%
+  rename(Term = term, Estimate = estimate, LL = conf.low, UL = conf.high, p = p.value) %&gt;%
+  select(Term, Estimate, LL, UL, p) %&gt;%
+  mutate(across(is.numeric, round, 4)) %&gt;%
+  head(2)</code></pre>
+<pre><code>## # A tibble: 2 × 5
+##   Term        Estimate       LL       UL      p
+##   &lt;chr&gt;          &lt;dbl&gt;    &lt;dbl&gt;    &lt;dbl&gt;  &lt;dbl&gt;
+## 1 (Intercept)  -20.0   -1208.   1168.    0.974 
+## 2 tp_on         -0.776    -1.35   -0.206 0.0077</code></pre>
+</div>
 <div id="experiment-1-data---models-8-11" class="section level2">
 <h2>Experiment 1 Data - Models 8-11</h2>
 <p>To show the main effect of the experimental condition (either
@@ -1042,26 +1175,17 @@ gendermale
 <h2>Experiment 2 Data - Models 12-15</h2>
 <div id="model-12-all-punishment-in-exp.-2" class="section level3">
 <h3>Model 12: All punishment in Exp. 2</h3>
-<pre class="r"><code>tpdata_pc %&gt;%
-  group_by(tp_on) %&gt;%
-  summarize(perc_punish = mean1(behavior_punish))</code></pre>
-<pre><code>## # A tibble: 2 × 2
-##   tp_on perc_punish
-##   &lt;dbl&gt;       &lt;dbl&gt;
-## 1     0       0.213
-## 2     1       0.135</code></pre>
-<pre class="r"><code>m12 = glmer(behavior_punish ~ tp_on + age + gender + factor(round) + (1|game) + (1|superid), data = tpdata_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c(&quot;bobyqa&quot;), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+<pre class="r"><code>m12 = glmer(behavior_punish ~ tp_on + factor(round) + (1|game) + (1|superid), data = tpdata_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c(&quot;bobyqa&quot;), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 
-# output with p-values
-tidy(m12, conf.int=TRUE, exponentiate=TRUE) %&gt;%
+tidy(m12, conf.int=TRUE, exponentiate=T) %&gt;%
   select(term, estimate, conf.low, conf.high, p.value) %&gt;%
   rename(Term = term, Estimate = estimate, 
          LL = conf.low, UL = conf.high, p = p.value) %&gt;%
   mutate(across(where(is.numeric), round, 4)) %&gt;%
   select(Term, Estimate, LL, UL, p) %&gt;%
-  head(4) %&gt;%
+  head(2) %&gt;%
   kbl() %&gt;%
-    kable_styling(bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;))</code></pre>
+      kable_styling(bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;))</code></pre>
 <table class="table table-striped table-hover table-condensed" style="margin-left: auto; margin-right: auto;">
 <thead>
 <tr>
@@ -1088,16 +1212,16 @@ p
 (Intercept)
 </td>
 <td style="text-align:right;">
-1.3230
+0.0000
 </td>
 <td style="text-align:right;">
-0.3328
+0.0000
 </td>
 <td style="text-align:right;">
-5.2597
+Inf
 </td>
 <td style="text-align:right;">
-0.6910
+0.9737
 </td>
 </tr>
 <tr>
@@ -1105,72 +1229,24 @@ p
 tp_on
 </td>
 <td style="text-align:right;">
-0.5600
+0.4602
 </td>
 <td style="text-align:right;">
-0.3014
+0.2601
 </td>
 <td style="text-align:right;">
-1.0404
+0.8142
 </td>
 <td style="text-align:right;">
-0.0666
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-age
-</td>
-<td style="text-align:right;">
-0.9531
-</td>
-<td style="text-align:right;">
-0.9245
-</td>
-<td style="text-align:right;">
-0.9826
-</td>
-<td style="text-align:right;">
-0.0020
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-gendermale
-</td>
-<td style="text-align:right;">
-1.0695
-</td>
-<td style="text-align:right;">
-0.5834
-</td>
-<td style="text-align:right;">
-1.9606
-</td>
-<td style="text-align:right;">
-0.8281
+0.0077
 </td>
 </tr>
 </tbody>
 </table>
-<pre class="r"><code>m12 = glmer(behavior_punish ~ tp_on + factor(round) + (1|game) + (1|superid), data = tpdata_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c(&quot;bobyqa&quot;), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
-
-tidy(m12, conf.int=TRUE, exponentiate=TRUE) %&gt;%
-  select(term, estimate, conf.low, conf.high, p.value) %&gt;%
-  rename(Term = term, Estimate = estimate, 
-         LL = conf.low, UL = conf.high, p = p.value) %&gt;%
-  mutate(across(where(is.numeric), round, 4)) %&gt;%
-  select(Term, Estimate, LL, UL, p) %&gt;%
-  head(2) </code></pre>
-<pre><code>## # A tibble: 2 × 5
-##   Term        Estimate    LL      UL      p
-##   &lt;chr&gt;          &lt;dbl&gt; &lt;dbl&gt;   &lt;dbl&gt;  &lt;dbl&gt;
-## 1 (Intercept)    0     0     Inf     0.974 
-## 2 tp_on          0.460 0.260   0.814 0.0077</code></pre>
 </div>
 <div id="model-13-ia-in-exp.-2" class="section level3">
 <h3>Model 13: IA in Exp. 2</h3>
-<pre class="r"><code>m13 = glmer(wealth_inequal ~ tp_on + age + gender + factor(round) + (1|game) + (1|superid), data = tpdata_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c(&quot;bobyqa&quot;), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+<pre class="r"><code>m13 = glmer(wealth_inequal ~ tp_on + factor(round) + (1|game) + (1|superid), data = tpdata_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c(&quot;bobyqa&quot;), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 
 # output with p-values
 tidy(m13, conf.int=TRUE, exponentiate=TRUE) %&gt;%
@@ -1179,7 +1255,7 @@ tidy(m13, conf.int=TRUE, exponentiate=TRUE) %&gt;%
          LL = conf.low, UL = conf.high, p = p.value) %&gt;%
   mutate(across(where(is.numeric), round, 4)) %&gt;%
   select(Term, Estimate, LL, UL, p) %&gt;%
-  head(4) %&gt;%
+  head(2) %&gt;%
   kbl() %&gt;%
     kable_styling(bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;))</code></pre>
 <table class="table table-striped table-hover table-condensed" style="margin-left: auto; margin-right: auto;">
@@ -1208,16 +1284,16 @@ p
 (Intercept)
 </td>
 <td style="text-align:right;">
-1.7181
+1.8048
 </td>
 <td style="text-align:right;">
-0.1828
+0.8674
 </td>
 <td style="text-align:right;">
-16.1519
+3.7555
 </td>
 <td style="text-align:right;">
-0.6359
+0.1142
 </td>
 </tr>
 <tr>
@@ -1225,50 +1301,16 @@ p
 tp_on
 </td>
 <td style="text-align:right;">
-1.4091
+1.4457
 </td>
 <td style="text-align:right;">
-0.5231
+0.5929
 </td>
 <td style="text-align:right;">
-3.7959
+3.5249
 </td>
 <td style="text-align:right;">
-0.4976
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-age
-</td>
-<td style="text-align:right;">
-1.0029
-</td>
-<td style="text-align:right;">
-0.9543
-</td>
-<td style="text-align:right;">
-1.0541
-</td>
-<td style="text-align:right;">
-0.9081
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-gendermale
-</td>
-<td style="text-align:right;">
-0.6681
-</td>
-<td style="text-align:right;">
-0.2360
-</td>
-<td style="text-align:right;">
-1.8912
-</td>
-<td style="text-align:right;">
-0.4474
+0.4176
 </td>
 </tr>
 </tbody>
@@ -1276,7 +1318,7 @@ gendermale
 </div>
 <div id="model-14-rp-in-exp.-2" class="section level3">
 <h3>Model 14: RP in Exp. 2</h3>
-<pre class="r"><code>m14 = glmer(reactive_p ~ tp_on + age + gender + factor(round) + (1|game) + (1|superid), data = tpdata_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c(&quot;bobyqa&quot;), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+<pre class="r"><code>m14 = glmer(reactive_p ~ tp_on + factor(round) + (1|game) + (1|superid), data = tpdata_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c(&quot;bobyqa&quot;), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 
 # output with p-values
 tidy(m14, conf.int=TRUE, exponentiate=TRUE) %&gt;%
@@ -1285,7 +1327,7 @@ tidy(m14, conf.int=TRUE, exponentiate=TRUE) %&gt;%
          LL = conf.low, UL = conf.high, p = p.value) %&gt;%
   mutate(across(where(is.numeric), round, 4)) %&gt;%
   select(Term, Estimate, LL, UL, p) %&gt;%
-  head(4) %&gt;%
+  head(2) %&gt;%
   kbl() %&gt;%
     kable_styling(bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;))</code></pre>
 <table class="table table-striped table-hover table-condensed" style="margin-left: auto; margin-right: auto;">
@@ -1323,7 +1365,7 @@ p
 Inf
 </td>
 <td style="text-align:right;">
-0.9687
+0.9758
 </td>
 </tr>
 <tr>
@@ -1331,50 +1373,16 @@ Inf
 tp_on
 </td>
 <td style="text-align:right;">
-0.5193
+0.4498
 </td>
 <td style="text-align:right;">
-0.2472
+0.2113
 </td>
 <td style="text-align:right;">
-1.0908
+0.9574
 </td>
 <td style="text-align:right;">
-0.0835
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-age
-</td>
-<td style="text-align:right;">
-0.9683
-</td>
-<td style="text-align:right;">
-0.9445
-</td>
-<td style="text-align:right;">
-0.9926
-</td>
-<td style="text-align:right;">
-0.0109
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-gendermale
-</td>
-<td style="text-align:right;">
-1.0529
-</td>
-<td style="text-align:right;">
-0.6656
-</td>
-<td style="text-align:right;">
-1.6656
-</td>
-<td style="text-align:right;">
-0.8256
+0.0382
 </td>
 </tr>
 </tbody>
@@ -1382,7 +1390,7 @@ gendermale
 </div>
 <div id="model-15-up-in-exp.-2" class="section level3">
 <h3>Model 15: UP in Exp. 2</h3>
-<pre class="r"><code>m15 = glmer(unexplained_p ~ tp_on + age + gender + factor(round) + (1|game) + (1|superid), data = tpdata_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c(&quot;bobyqa&quot;), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+<pre class="r"><code>m15 = glmer(unexplained_p ~ tp_on + factor(round) + (1|game) + (1|superid), data = tpdata_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c(&quot;bobyqa&quot;), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 
 # output with p-values
 tidy(m15, conf.int=TRUE, exponentiate=TRUE) %&gt;%
@@ -1391,7 +1399,7 @@ tidy(m15, conf.int=TRUE, exponentiate=TRUE) %&gt;%
          LL = conf.low, UL = conf.high, p = p.value) %&gt;%
   mutate(across(where(is.numeric), round, 4)) %&gt;%
   select(Term, Estimate, LL, UL, p) %&gt;%
-  head(4) %&gt;%
+  head(2) %&gt;%
   kbl() %&gt;%
     kable_styling(bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;))</code></pre>
 <table class="table table-striped table-hover table-condensed" style="margin-left: auto; margin-right: auto;">
@@ -1420,16 +1428,16 @@ p
 (Intercept)
 </td>
 <td style="text-align:right;">
-0.7153
+0.0623
 </td>
 <td style="text-align:right;">
-0.0810
+0.0288
 </td>
 <td style="text-align:right;">
-6.3145
+0.1349
 </td>
 <td style="text-align:right;">
-0.7630
+0.0000
 </td>
 </tr>
 <tr>
@@ -1437,50 +1445,88 @@ p
 tp_on
 </td>
 <td style="text-align:right;">
-0.5969
+0.4913
 </td>
 <td style="text-align:right;">
-0.1993
+0.2007
 </td>
 <td style="text-align:right;">
-1.7874
+1.2028
 </td>
 <td style="text-align:right;">
-0.3565
+0.1198
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="model-16-cooperation-in-exp.-2" class="section level3">
+<h3>Model 16: Cooperation in Exp. 2</h3>
+<pre class="r"><code>m16 = glmer(behavior_coop ~ tp_on + factor(round) + (1|game) + (1|superid), data = tpdata_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c(&quot;bobyqa&quot;), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m16, conf.int=TRUE) %&gt;%
+  select(term, estimate, conf.low, conf.high, p.value) %&gt;%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %&gt;%
+  mutate(across(where(is.numeric), round, 4)) %&gt;%
+  select(Term, Estimate, LL, UL, p) %&gt;%
+  head(2) %&gt;%
+  kbl() %&gt;%
+    kable_styling(bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;))</code></pre>
+<table class="table table-striped table-hover table-condensed" style="margin-left: auto; margin-right: auto;">
+<thead>
+<tr>
+<th style="text-align:left;">
+Term
+</th>
+<th style="text-align:right;">
+Estimate
+</th>
+<th style="text-align:right;">
+LL
+</th>
+<th style="text-align:right;">
+UL
+</th>
+<th style="text-align:right;">
+p
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+(Intercept)
+</td>
+<td style="text-align:right;">
+-20.6933
+</td>
+<td style="text-align:right;">
+-1081.6616
+</td>
+<td style="text-align:right;">
+1040.2750
+</td>
+<td style="text-align:right;">
+0.9695
 </td>
 </tr>
 <tr>
 <td style="text-align:left;">
-age
+tp_on
 </td>
 <td style="text-align:right;">
-0.9333
+-0.4034
 </td>
 <td style="text-align:right;">
-0.8875
+-1.4201
 </td>
 <td style="text-align:right;">
-0.9815
+0.6133
 </td>
 <td style="text-align:right;">
-0.0072
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-gendermale
-</td>
-<td style="text-align:right;">
-1.3219
-</td>
-<td style="text-align:right;">
-0.5448
-</td>
-<td style="text-align:right;">
-3.2073
-</td>
-<td style="text-align:right;">
-0.5371
+0.4368
 </td>
 </tr>
 </tbody>
@@ -1494,7 +1540,7 @@ exp2m = tpdata_pc %&gt;% filter(gender == &quot;male&quot;)
 exp2f = tpdata_pc %&gt;% filter(gender == &quot;female&quot;)</code></pre>
 <div id="model-12m-all-punishment-in-exp.-2---males-only" class="section level3">
 <h3>Model 12m: All punishment in Exp. 2 - Males only</h3>
-<pre class="r"><code>m12m = glmer(behavior_punish ~ tp_on + age + factor(round) + (1|game) + (1|superid), data = exp2m, family = binomial, nAGQ=0, control = glmerControl(optimizer = c(&quot;bobyqa&quot;), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+<pre class="r"><code>m12m = glmer(behavior_punish ~ tp_on + factor(round) + (1|game) + (1|superid), data = exp2m, family = binomial, nAGQ=0, control = glmerControl(optimizer = c(&quot;bobyqa&quot;), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 
 # output with p-values
 tidy(m12m, conf.int=TRUE, exponentiate=TRUE) %&gt;%
@@ -1532,16 +1578,16 @@ p
 (Intercept)
 </td>
 <td style="text-align:right;">
-1.1815
+0.2260
 </td>
 <td style="text-align:right;">
-0.1944
+0.0976
 </td>
 <td style="text-align:right;">
-7.1787
+0.5234
 </td>
 <td style="text-align:right;">
-0.8563
+0.0005
 </td>
 </tr>
 <tr>
@@ -1549,33 +1595,33 @@ p
 tp_on
 </td>
 <td style="text-align:right;">
-0.4491
+0.4686
 </td>
 <td style="text-align:right;">
-0.1681
+0.1717
 </td>
 <td style="text-align:right;">
-1.1994
+1.2787
 </td>
 <td style="text-align:right;">
-0.1102
+0.1389
 </td>
 </tr>
 <tr>
 <td style="text-align:left;">
-age
+factor(round)2
 </td>
 <td style="text-align:right;">
-0.9530
+1.4876
 </td>
 <td style="text-align:right;">
-0.9092
+0.6798
 </td>
 <td style="text-align:right;">
-0.9990
+3.2552
 </td>
 <td style="text-align:right;">
-0.0452
+0.3202
 </td>
 </tr>
 </tbody>
@@ -1583,7 +1629,7 @@ age
 </div>
 <div id="model-12f-all-punishment-in-exp.-2---females-only" class="section level3">
 <h3>Model 12f: All punishment in Exp. 2 - Females only</h3>
-<pre class="r"><code>m12f = glmer(behavior_punish ~ tp_on + age + factor(round) + (1|game) + (1|superid), data = exp2f, family = binomial, nAGQ=0, control = glmerControl(optimizer = c(&quot;bobyqa&quot;), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+<pre class="r"><code>m12f = glmer(behavior_punish ~ tp_on + factor(round) + (1|game) + (1|superid), data = exp2f, family = binomial, nAGQ=0, control = glmerControl(optimizer = c(&quot;bobyqa&quot;), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 
 # output with p-values
 tidy(m12f, conf.int=TRUE, exponentiate=TRUE) %&gt;%
@@ -1621,16 +1667,16 @@ p
 (Intercept)
 </td>
 <td style="text-align:right;">
-1.6305
+0.2453
 </td>
 <td style="text-align:right;">
-0.3217
+0.1131
 </td>
 <td style="text-align:right;">
-8.2636
+0.5322
 </td>
 <td style="text-align:right;">
-0.5549
+0.0004
 </td>
 </tr>
 <tr>
@@ -1638,33 +1684,33 @@ p
 tp_on
 </td>
 <td style="text-align:right;">
-0.6981
+0.6957
 </td>
 <td style="text-align:right;">
-0.3371
+0.3258
 </td>
 <td style="text-align:right;">
-1.4453
+1.4854
 </td>
 <td style="text-align:right;">
-0.3330
+0.3485
 </td>
 </tr>
 <tr>
 <td style="text-align:left;">
-age
+factor(round)2
 </td>
 <td style="text-align:right;">
-0.9535
+0.8330
 </td>
 <td style="text-align:right;">
-0.9192
+0.3601
 </td>
 <td style="text-align:right;">
-0.9891
+1.9268
 </td>
 <td style="text-align:right;">
-0.0108
+0.6693
 </td>
 </tr>
 </tbody>
@@ -1672,7 +1718,7 @@ age
 </div>
 <div id="model-13m-ia-in-exp.-2---males-only" class="section level3">
 <h3>Model 13m: IA in Exp. 2 - Males only</h3>
-<pre class="r"><code>m13m = glmer(wealth_inequal ~ tp_on + age + factor(round) + (1|game) + (1|superid), data = exp2m, family = binomial, nAGQ=0, control = glmerControl(optimizer = c(&quot;bobyqa&quot;), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+<pre class="r"><code>m13m = glmer(wealth_inequal ~ tp_on + factor(round) + (1|game) + (1|superid), data = exp2m, family = binomial, nAGQ=0, control = glmerControl(optimizer = c(&quot;bobyqa&quot;), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 
 # output with p-values
 tidy(m13m, conf.int=TRUE, exponentiate=TRUE) %&gt;%
@@ -1710,16 +1756,16 @@ p
 (Intercept)
 </td>
 <td style="text-align:right;">
-1.9090
+1.4374
 </td>
 <td style="text-align:right;">
-0.1716
+0.5482
 </td>
 <td style="text-align:right;">
-21.2352
+3.7691
 </td>
 <td style="text-align:right;">
-0.5989
+0.4607
 </td>
 </tr>
 <tr>
@@ -1727,33 +1773,33 @@ p
 tp_on
 </td>
 <td style="text-align:right;">
-1.3573
+1.3630
 </td>
 <td style="text-align:right;">
-0.3860
+0.3874
 </td>
 <td style="text-align:right;">
-4.7727
+4.7954
 </td>
 <td style="text-align:right;">
-0.6339
+0.6295
 </td>
 </tr>
 <tr>
 <td style="text-align:left;">
-age
+factor(round)2
 </td>
 <td style="text-align:right;">
-0.9917
+0.8475
 </td>
 <td style="text-align:right;">
-0.9296
+0.3856
 </td>
 <td style="text-align:right;">
-1.0580
+1.8627
 </td>
 <td style="text-align:right;">
-0.8011
+0.6805
 </td>
 </tr>
 </tbody>
@@ -1761,7 +1807,7 @@ age
 </div>
 <div id="model-13f-ia-in-exp.-2---females-only" class="section level3">
 <h3>Model 13f: IA in Exp. 2 - Females only</h3>
-<pre class="r"><code>m13f = glmer(wealth_inequal ~ tp_on + age + factor(round) + (1|game) + (1|superid), data = exp2f, family = binomial, nAGQ=0, control = glmerControl(optimizer = c(&quot;bobyqa&quot;), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+<pre class="r"><code>m13f = glmer(wealth_inequal ~ tp_on + factor(round) + (1|game) + (1|superid), data = exp2f, family = binomial, nAGQ=0, control = glmerControl(optimizer = c(&quot;bobyqa&quot;), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 
 # output with p-values
 tidy(m13f, conf.int=TRUE, exponentiate=TRUE) %&gt;%
@@ -1799,16 +1845,16 @@ p
 (Intercept)
 </td>
 <td style="text-align:right;">
-0.8615
+1.6360
 </td>
 <td style="text-align:right;">
-0.0280
+0.4377
 </td>
 <td style="text-align:right;">
-26.5522
+6.1153
 </td>
 <td style="text-align:right;">
-0.9321
+0.4643
 </td>
 </tr>
 <tr>
@@ -1816,33 +1862,33 @@ p
 tp_on
 </td>
 <td style="text-align:right;">
-1.4860
+1.4639
 </td>
 <td style="text-align:right;">
-0.2999
+0.2956
 </td>
 <td style="text-align:right;">
-7.3632
+7.2504
 </td>
 <td style="text-align:right;">
-0.6276
+0.6406
 </td>
 </tr>
 <tr>
 <td style="text-align:left;">
-age
+factor(round)2
 </td>
 <td style="text-align:right;">
-1.0159
+0.8913
 </td>
 <td style="text-align:right;">
-0.9397
+0.3481
 </td>
 <td style="text-align:right;">
-1.0983
+2.2824
 </td>
 <td style="text-align:right;">
-0.6914
+0.8105
 </td>
 </tr>
 </tbody>
@@ -1850,7 +1896,7 @@ age
 </div>
 <div id="model-14m-rp-in-exp.-2---males-only" class="section level3">
 <h3>Model 14m: RP in Exp. 2 - Males only</h3>
-<pre class="r"><code>m14m = glmer(reactive_p ~ tp_on + age + factor(round) + (1|game) + (1|superid), data = exp2m, family = binomial, nAGQ=0, control = glmerControl(optimizer = c(&quot;bobyqa&quot;), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+<pre class="r"><code>m14m = glmer(reactive_p ~ tp_on + factor(round) + (1|game) + (1|superid), data = exp2m, family = binomial, nAGQ=0, control = glmerControl(optimizer = c(&quot;bobyqa&quot;), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 
 # output with p-values
 tidy(m14m, conf.int=TRUE, exponentiate=TRUE) %&gt;%
@@ -1888,16 +1934,16 @@ p
 (Intercept)
 </td>
 <td style="text-align:right;">
-0.0000
+0.00000e+00
 </td>
 <td style="text-align:right;">
-0.0000
+0.000
 </td>
 <td style="text-align:right;">
 Inf
 </td>
 <td style="text-align:right;">
-0.9763
+0.9751
 </td>
 </tr>
 <tr>
@@ -1905,33 +1951,33 @@ Inf
 tp_on
 </td>
 <td style="text-align:right;">
-0.4981
+4.97900e-01
 </td>
 <td style="text-align:right;">
-0.1947
+0.188
 </td>
 <td style="text-align:right;">
-1.2739
+1.3185
 </td>
 <td style="text-align:right;">
-0.1458
+0.1605
 </td>
 </tr>
 <tr>
 <td style="text-align:left;">
-age
+factor(round)2
 </td>
 <td style="text-align:right;">
-0.9734
+2.64804e+07
 </td>
 <td style="text-align:right;">
-0.9393
+0.000
 </td>
 <td style="text-align:right;">
-1.0088
+Inf
 </td>
 <td style="text-align:right;">
-0.1390
+0.9772
 </td>
 </tr>
 </tbody>
@@ -1939,7 +1985,7 @@ age
 </div>
 <div id="model-14f-rp-in-exp.-2---females-only" class="section level3">
 <h3>Model 14f: RP in Exp. 2 - Females only</h3>
-<pre class="r"><code>m14f = glmer(reactive_p ~ tp_on + age + factor(round) + (1|game) + (1|superid), data = exp2f, family = binomial, nAGQ=0, control = glmerControl(optimizer = c(&quot;bobyqa&quot;), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+<pre class="r"><code>m14f = glmer(reactive_p ~ tp_on + factor(round) + (1|game) + (1|superid), data = exp2f, family = binomial, nAGQ=0, control = glmerControl(optimizer = c(&quot;bobyqa&quot;), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 
 # output with p-values
 tidy(m14f, conf.int=TRUE, exponentiate=TRUE) %&gt;%
@@ -1977,7 +2023,7 @@ p
 (Intercept)
 </td>
 <td style="text-align:right;">
-0.0000
+0.000000e+00
 </td>
 <td style="text-align:right;">
 0.0000
@@ -1986,7 +2032,7 @@ p
 Inf
 </td>
 <td style="text-align:right;">
-0.9873
+0.9859
 </td>
 </tr>
 <tr>
@@ -1994,33 +2040,33 @@ Inf
 tp_on
 </td>
 <td style="text-align:right;">
-0.4609
+4.761000e-01
 </td>
 <td style="text-align:right;">
-0.2365
+0.2346
 </td>
 <td style="text-align:right;">
-0.898
+0.9662
 </td>
 <td style="text-align:right;">
-0.0228
+0.0398
 </td>
 </tr>
 <tr>
 <td style="text-align:left;">
-age
+factor(round)2
 </td>
 <td style="text-align:right;">
-0.9491
+3.881718e+07
 </td>
 <td style="text-align:right;">
-0.9174
+0.0000
 </td>
 <td style="text-align:right;">
-0.982
+Inf
 </td>
 <td style="text-align:right;">
-0.0027
+0.9874
 </td>
 </tr>
 </tbody>
@@ -2028,7 +2074,7 @@ age
 </div>
 <div id="model-15m-up-in-exp.-2---males-only" class="section level3">
 <h3>Model 15m: UP in Exp. 2 - Males only</h3>
-<pre class="r"><code>m15m = glmer(unexplained_p ~ tp_on + age  + factor(round) + (1|game) + (1|superid), data = exp2m, family = binomial, nAGQ=0, control = glmerControl(optimizer = c(&quot;bobyqa&quot;), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+<pre class="r"><code>m15m = glmer(unexplained_p ~ tp_on + factor(round) + (1|game) + (1|superid), data = exp2m, family = binomial, nAGQ=0, control = glmerControl(optimizer = c(&quot;bobyqa&quot;), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 
 # output with p-values
 tidy(m15m, conf.int=TRUE, exponentiate=TRUE) %&gt;%
@@ -2066,16 +2112,16 @@ p
 (Intercept)
 </td>
 <td style="text-align:right;">
-0.9560
+0.0702
 </td>
 <td style="text-align:right;">
-0.0547
+0.0212
 </td>
 <td style="text-align:right;">
-16.7074
+0.2326
 </td>
 <td style="text-align:right;">
-0.9754
+0.0000
 </td>
 </tr>
 <tr>
@@ -2083,33 +2129,33 @@ p
 tp_on
 </td>
 <td style="text-align:right;">
-0.4614
+0.4787
 </td>
 <td style="text-align:right;">
-0.0961
+0.1004
 </td>
 <td style="text-align:right;">
-2.2149
+2.2817
 </td>
 <td style="text-align:right;">
-0.3338
+0.3551
 </td>
 </tr>
 <tr>
 <td style="text-align:left;">
-age
+factor(round)2
 </td>
 <td style="text-align:right;">
-0.9249
+0.3396
 </td>
 <td style="text-align:right;">
-0.8538
+0.1010
 </td>
 <td style="text-align:right;">
-1.0019
+1.1422
 </td>
 <td style="text-align:right;">
-0.0557
+0.0810
 </td>
 </tr>
 </tbody>
@@ -2117,7 +2163,7 @@ age
 </div>
 <div id="model-15f-up-in-exp.-2---females-only" class="section level3">
 <h3>Model 15f: UP in Exp. 2 - Females only</h3>
-<pre class="r"><code>m15f = glmer(unexplained_p ~ tp_on + age + factor(round) + (1|game) + (1|superid), data = exp2f, family = binomial, nAGQ=0, control = glmerControl(optimizer = c(&quot;bobyqa&quot;), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+<pre class="r"><code>m15f = glmer(unexplained_p ~ tp_on + factor(round) + (1|game) + (1|superid), data = exp2f, family = binomial, nAGQ=0, control = glmerControl(optimizer = c(&quot;bobyqa&quot;), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 
 # output with p-values
 tidy(m15f, conf.int=TRUE, exponentiate=TRUE) %&gt;%
@@ -2155,16 +2201,16 @@ p
 (Intercept)
 </td>
 <td style="text-align:right;">
-0.6259
+0.0752
 </td>
 <td style="text-align:right;">
-0.0639
+0.0264
 </td>
 <td style="text-align:right;">
-6.1350
+0.2137
 </td>
 <td style="text-align:right;">
-0.6874
+0.0000
 </td>
 </tr>
 <tr>
@@ -2172,33 +2218,33 @@ p
 tp_on
 </td>
 <td style="text-align:right;">
-0.7770
+0.7889
 </td>
 <td style="text-align:right;">
-0.2789
+0.2744
 </td>
 <td style="text-align:right;">
-2.1647
+2.2683
 </td>
 <td style="text-align:right;">
-0.6294
+0.6599
 </td>
 </tr>
 <tr>
 <td style="text-align:left;">
-age
+factor(round)2
 </td>
 <td style="text-align:right;">
-0.9476
+0.5124
 </td>
 <td style="text-align:right;">
-0.8977
+0.1344
 </td>
 <td style="text-align:right;">
-1.0002
+1.9534
 </td>
 <td style="text-align:right;">
-0.0511
+0.3274
 </td>
 </tr>
 </tbody>
@@ -2213,8 +2259,8 @@ age
   pun_type = c(&quot;All Punishment&quot;, &quot;IA&quot;, &quot;RP&quot;, &quot;UP&quot;),
   tp_off_percentage = c(373/1580, 171/1580, 200/1580, 106/1580),
   tp_on_percentage = c(239/1629, 141/1629, 102/1629, 58/1629),
-  OR_tp = c(&quot;0.560 (0.3014, 1.0404)&quot;, &quot;1.4091 (0.5231, 3.7959)&quot;, &quot;0.5193 (0.2472, 1.0908)&quot;, &quot;0.5969, (0.1993, 1.7874)&quot;),
-  p = c(0.0666, 0.4976, 0.0835, 0.3565),
+  OR_tp = c(&quot;0.4602 (0.2601,    0.8142)&quot;, &quot;1.4457   (0.5929, 3.5249)&quot;, &quot;0.4498  (0.2113,    0.9574)&quot;, &quot;0.4913   (0.2007,    1.2028)&quot;),
+  p = c(0.007, 0.4176, 0.0382, 0.1198),
 )
 
 table1 %&gt;%
@@ -2253,10 +2299,10 @@ All Punishment
 0.1467
 </td>
 <td style="text-align:left;">
-0.560 (0.3014, 1.0404)
+0.4602 (0.2601, 0.8142)
 </td>
 <td style="text-align:right;">
-0.0666
+0.0070
 </td>
 </tr>
 <tr>
@@ -2270,10 +2316,10 @@ IA
 0.0866
 </td>
 <td style="text-align:left;">
-1.4091 (0.5231, 3.7959)
+1.4457 (0.5929, 3.5249)
 </td>
 <td style="text-align:right;">
-0.4976
+0.4176
 </td>
 </tr>
 <tr>
@@ -2287,10 +2333,10 @@ RP
 0.0626
 </td>
 <td style="text-align:left;">
-0.5193 (0.2472, 1.0908)
+0.4498 (0.2113, 0.9574)
 </td>
 <td style="text-align:right;">
-0.0835
+0.0382
 </td>
 </tr>
 <tr>
@@ -2304,227 +2350,15 @@ UP
 0.0356
 </td>
 <td style="text-align:left;">
-0.5969, (0.1993, 1.7874)
+0.4913 (0.2007, 1.2028)
 </td>
 <td style="text-align:right;">
-0.3565
+0.1198
 </td>
 </tr>
 </tbody>
 </table>
 </div>
-<div id="table-1a---females-only" class="section level3">
-<h3>Table 1a - Females only</h3>
-<pre class="r"><code>table1a = tibble(
-  pun_type = c(&quot;All Punishment&quot;, &quot;IA&quot;, &quot;RP&quot;, &quot;UP&quot;),
-  tp_off_percentage = c(0.1832, 0.1134, 0.1169, 0.0314),
-  tp_on_percentage = c(0.1413, 0.0978, 0.0543, 0.0260),
-  OR_tp = c(&quot;0.6981 (0.3371, 1.4453)&quot;, &quot;1.4860 (0.2999, 7.3632)&quot;, &quot;0.4609   (0.2365, 0.898)&quot;, &quot;0.7770   (0.2789, 2.1647)&quot;),
-  p = c(0.333, 0.6276, 0.0228, 0.6294)
-)
-
-table1a %&gt;%
-  mutate(across(where(is.numeric), round, 4)) %&gt;%
-  kbl(col.names = c(&quot;Punishment Type&quot;, &quot;% no TP&quot;, &quot;% TP&quot;, &quot;$OR_{TP}$ (95% CI)&quot;, &quot;p&quot;)) %&gt;%
-  kable_styling(bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;))</code></pre>
-<table class="table table-striped table-hover table-condensed" style="margin-left: auto; margin-right: auto;">
-<thead>
-<tr>
-<th style="text-align:left;">
-Punishment Type
-</th>
-<th style="text-align:right;">
-% no TP
-</th>
-<th style="text-align:right;">
-% TP
-</th>
-<th style="text-align:left;">
-<span class="math inline">\(OR_{TP}\)</span> (95% CI)
-</th>
-<th style="text-align:right;">
-p
-</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:left;">
-All Punishment
-</td>
-<td style="text-align:right;">
-0.1832
-</td>
-<td style="text-align:right;">
-0.1413
-</td>
-<td style="text-align:left;">
-0.6981 (0.3371, 1.4453)
-</td>
-<td style="text-align:right;">
-0.3330
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-IA
-</td>
-<td style="text-align:right;">
-0.1134
-</td>
-<td style="text-align:right;">
-0.0978
-</td>
-<td style="text-align:left;">
-1.4860 (0.2999, 7.3632)
-</td>
-<td style="text-align:right;">
-0.6276
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-RP
-</td>
-<td style="text-align:right;">
-0.1169
-</td>
-<td style="text-align:right;">
-0.0543
-</td>
-<td style="text-align:left;">
-0.4609 (0.2365, 0.898)
-</td>
-<td style="text-align:right;">
-0.0228
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-UP
-</td>
-<td style="text-align:right;">
-0.0314
-</td>
-<td style="text-align:right;">
-0.0260
-</td>
-<td style="text-align:left;">
-0.7770 (0.2789, 2.1647)
-</td>
-<td style="text-align:right;">
-0.6294
-</td>
-</tr>
-</tbody>
-</table>
-</div>
-</div>
-<div id="table-1b---males-only" class="section level2">
-<h2>Table 1b - Males only</h2>
-<pre class="r"><code>table1a = tibble(
-  pun_type = c(&quot;All Punishment&quot;, &quot;IA&quot;, &quot;RP&quot;, &quot;UP&quot;),
-  tp_off_percentage = c(0.2712, 0.1012, 0.1269, 0.0943),
-  tp_on_percentage = c(0.1845, 0.0823, 0.0890, 0.0583),
-  OR_tp = c(&quot;0.4491 (0.1681, 1.1994)&quot;, &quot;1.3573 (0.3860, 4.7727)&quot;, &quot;0.4981   (0.1947,    1.2739)&quot;, &quot;0.4614   (0.0961,    2.2149) &quot;),
-  p = c(0.1102, 0.6339, 0.1458, 0.3338)
-)
-
-table1a %&gt;%
-  mutate(across(where(is.numeric), round, 4)) %&gt;%
-  kbl(col.names = c(&quot;Punishment Type&quot;, &quot;% no TP&quot;, &quot;% TP&quot;, &quot;$OR_{TP}$ (95% CI)&quot;, &quot;p&quot;)) %&gt;%
-  kable_styling(bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;))</code></pre>
-<table class="table table-striped table-hover table-condensed" style="margin-left: auto; margin-right: auto;">
-<thead>
-<tr>
-<th style="text-align:left;">
-Punishment Type
-</th>
-<th style="text-align:right;">
-% no TP
-</th>
-<th style="text-align:right;">
-% TP
-</th>
-<th style="text-align:left;">
-<span class="math inline">\(OR_{TP}\)</span> (95% CI)
-</th>
-<th style="text-align:right;">
-p
-</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:left;">
-All Punishment
-</td>
-<td style="text-align:right;">
-0.2712
-</td>
-<td style="text-align:right;">
-0.1845
-</td>
-<td style="text-align:left;">
-0.4491 (0.1681, 1.1994)
-</td>
-<td style="text-align:right;">
-0.1102
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-IA
-</td>
-<td style="text-align:right;">
-0.1012
-</td>
-<td style="text-align:right;">
-0.0823
-</td>
-<td style="text-align:left;">
-1.3573 (0.3860, 4.7727)
-</td>
-<td style="text-align:right;">
-0.6339
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-RP
-</td>
-<td style="text-align:right;">
-0.1269
-</td>
-<td style="text-align:right;">
-0.0890
-</td>
-<td style="text-align:left;">
-0.4981 (0.1947, 1.2739)
-</td>
-<td style="text-align:right;">
-0.1458
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-UP
-</td>
-<td style="text-align:right;">
-0.0943
-</td>
-<td style="text-align:right;">
-0.0583
-</td>
-<td style="text-align:left;">
-0.4614 (0.0961, 2.2149)
-</td>
-<td style="text-align:right;">
-0.3338
-</td>
-</tr>
-</tbody>
-</table>
 </div>
 </div>
 
