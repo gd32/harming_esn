@@ -42,10 +42,14 @@ load("~/Documents/Projects/harming_esn/Data/raw/ndata_individual.Rdata")
 
 # data1
 load("~/Documents/Projects/harming_esn/Data/data1.Rdata") #data1
+```
 
+```{r}
 mean1 = function(x) {mean(x,na.rm=TRUE)}
 median1 = function(x) {median(x, na.rm = TRUE)}
+```
 
+```{r}
 data1 = data1 %>%
   as_tibble()
 
@@ -99,7 +103,7 @@ prop.test(x = c(270, 279), n = c(549, 549))
 
 **49.6% wealth inequality vs 48% not due to wealth inequality**
 
-## Reactive punishment
+## Retaliation punishment
 
 Punishment in response to punishment, defined as punishment after an alter punished in last round regardless of punishing alters' current ties (so this means the punishing alter no longer needs to be tied to the ego after rewiring).
 
@@ -273,7 +277,19 @@ tpdata %>%
   dim() #612 punishments
 ```
 
-## Instrumental punishment: punishing to reduce inequality defined as punishment that occurs when ego's wealth is lower than the mean wealth of alters
+## Stats for two assignment arms
+
+```{r}
+tpdata_pc %>%
+  group_by(tp_on) %>%
+  filter(behavior %in% c("C", "D", "P"), round > 0) %>%
+  summarize(n =n()) %>%
+  mutate(perc = n/sum(n))
+```
+
+## Punishment for inequality aversion (IA)
+
+- punishing to reduce inequality defined as punishment that occurs when ego's wealth is lower than the mean wealth of alters
 
 ```{r}
 # first, get the list of alters
@@ -306,7 +322,9 @@ ndata_long_alters_wealth = ndata_long_alters %>%
 tpdata_pc = tpdata %>%
   left_join(ndata_long_alters_wealth, by = c("round", "game", "superid")) %>%
   mutate(wealth_inequal = ifelse(cPayoffS < mean_alter_wealth, 1, 0)) 
+```
 
+```{r}
 tpdata_pc %>%
   filter(round > 0) %>%
   group_by(behavior, tp_on) %>%
@@ -314,26 +332,9 @@ tpdata_pc %>%
   summarize(n=n()) %>%
   mutate(perc = n/sum(n),
          total = sum(n))
-```
 
-```{r}
+# rough check of p-value
 prop.test(c(373, 239), c(1580, 1629))
-```
-```{r}
-# logit model (crude)
-
-m_test = glm(behavior_punish ~ tp_on, data = tpdata_pc)
-
-
-# add age and gender to model
-# 
-# add round
-# 
-# use clustering w/ id
-# 
-# add game
-# 
-# 
 ```
 
 ```{r}
@@ -350,13 +351,17 @@ prop.test(x = c(290, 312), n = c(290+312,  290+312))
 
 **51.0% wealth inequality, 47.4% wealth equal**
 
-## Reactive punishment: punishment in response to punishment defined as: punishment after an alter punished in last round
+## Reactive punishment (RP)
+
+Punishment in response to punishment defined as punishment after an alter punished in last round (aka retaliating punishment)
 
 ```{r}
 tpdata_pc = 
   tpdata_pc %>% 
   mutate(reactive_p = ifelse(behavior == "P" & prev_local_rate_punish!=0, 1, 0))
+```
 
+```{R}
 tpdata_pc %>%
   filter(behavior == "P") %>%
   group_by(reactive_p) %>%
@@ -381,41 +386,42 @@ tpdata_pc %>%
 # 23.3%?
 ```
 
+## RP (-) - All punishment excluding RP
 
+RP(-) defined as all punishment that is NOT retaliation (includes all IA and UP).
+
+```{r}
+tpdata_pc %>%
+    filter(reactive_p == 0, behavior == "P") %>%
+    group_by(tp_on) %>%
+    summarize(n = n()) %>%
+    mutate(armtotal = ifelse(tp_on == 0, 1580, 1629),
+           armperc = n/armtotal)
+
+#tp off: 173/1580 = 0.1095
+#tp on: 137/1629 = 0.0841
+
+prop.test(c(173, 137), c(1580, 1629)) # rough p-value = 0.0175
+```
 ## Unexplained punishments - not reactive or calculated
 
 ```{r}
 tpdata_pc %>%
-  filter(behavior == "P" & round <= 1) %>%
-  dim()
-
-tpdata_pc %>%
-  filter(behavior == "P" & round > 1 & wealth_inequal == 0 & reactive_p == 0) %>%
-  dim() 
+  mutate(unexplained_p = ifelse(behavior == "P" & reactive_p == 0 & 
+                             wealth_inequal == 0, 1, 0)) %>%
+  group_by(tp_on, unexplained_p) %>%
+  filter(unexplained_p %in% c(0, 1)) %>%
+  summarize(n = n())
 ```
 
 ```{r}
-# crosstabs
-xtabs(~wealth_inequal + reactive_p, tpdata_pc %>% filter(round > 1, behavior == "P"))
-
-# tp_labels = read_csv("~/Documents/Projects/breadboard/time_pressure_brb/Assignment/tp_assignment.csv")
-# tp_on = tp_labels %>% filter(time_pressure_on == 1) %>% select(game) %>% pull()
-# 
-# tpdata_pc = tpdata_pc %>%
-#   mutate(time_pressure = ifelse(game %in% tp_on, 1, 0))
-
-xtabs(~time_pressure+wealth_inequal, tpdata_only_p)
-xtabs(~time_pressure+reactive_p, tpdata_only_p)
-
 tpdata_pc %>%
   group_by(tp_on, behavior) %>%
   filter(behavior %in% c("C", "D", "P")) %>%
   summarize(n = n()) %>%
   mutate(perc = n/sum(n),
          total = sum(n))
-```
 
-```{r}
 # p-values
 # for C
 prop.test(x = c(837, 706), n = c(1580, 1629)) # p < 0.0001
@@ -436,8 +442,8 @@ tpdata_pc %>%
          total = sum(n)) %>%
   filter(wealth_inequal == 1)
 
-171/1580 # tp off
-141/1629 # tp on
+#171/1580 tp off
+#141/1629 tp on
 
 prop.test(c(171, 141), c(1580, 1629))
 ```
@@ -470,6 +476,22 @@ tpdata_pc %>%
 58/1629 #3.56
 
 prop.test(c(106, 56), c(1580, 1629))
+```
+
+## Cleanup
+
+```{r}
+# Making sure all punishment subtypes are in the dataset then saving to disk
+
+# c("wealth_inequal", "reactive_p", "unexplained_p", "reactive_p_neg") %in% names(tpdata_pc)
+
+tpdata_pc = tpdata_pc %>%
+  mutate(reactive_p_neg = ifelse(reactive_p == 0 & behavior == "P", 1, 0),
+         unexplained_p = ifelse(behavior == "P" & reactive_p == 0 & 
+                             wealth_inequal == 0, 1, 0))
+
+# c("wealth_inequal", "reactive_p", "unexplained_p", "reactive_p_neg") %in% names(tpdata_pc)
+# save(tpdata_pc, file = "~/Documents/Projects/harming_esn/code/exp2/tpdata_pc.Rdata")
 ```
 
 # Distributions of decision time

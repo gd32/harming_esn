@@ -68,8 +68,8 @@ library(reldist) # to calculate gini
 library(sjPlot) # for tables
 library(binom) # for generating confidence intervals
 library(broom.mixed) # for mixed effects models output
-
-
+```
+```{r}
 mean1 = function(x) {mean(x,na.rm=TRUE)}
 median1 = function(x) {median(x, na.rm = TRUE)}
 ```
@@ -570,6 +570,29 @@ ggplot(
 ## Statistical test for differences in decision times
 
 ```{r}
+## Two sample t-test for difference in DT distributions by behavior category
+times_coop = data1 %>% filter(behavior_coop == 1) %>% select(behaviorTime_sec) %>% pull()
+times_defect = data1 %>% filter(behavior_defect == 1) %>% select(behaviorTime_sec) %>% pull()
+times_punish = data1 %>% filter(behavior_punish == 1) %>% select(behaviorTime_sec) %>% pull()
+
+se_mean = function(x) sd(x)/sqrt(length(x))
+se_mean(times_defect)
+
+mean1(times_coop)
+round(mean1(times_coop)+ 1.96*se_mean(times_coop), 2)
+round(mean1(times_coop)- 1.96*se_mean(times_coop), 2)
+
+mean1(times_defect)
+round(mean1(times_defect)+ 1.96*se_mean(times_defect), 2)
+round(mean1(times_defect)- 1.96*se_mean(times_defect), 2)
+
+mean1(times_punish)
+round(mean1(times_punish)+ 1.96*se_mean(times_punish), 2)
+round(mean1(times_punish)- 1.96*se_mean(times_punish), 2)
+
+t.test(times_punish, times_coop)
+t.test(times_punish, times_defect)
+
 ## Two sample Kolmogorov test for difference in DT distributions comparing above and below threshold
 
 times_below_thresh = data1_cc %>% filter(conflict == 0) %>% select(behaviorTime_sec) %>% pull()
@@ -817,7 +840,6 @@ round(addmargins(prop.table(xtabs(~behavior_punish_lag + peace_individual + alte
 
 
 Based on above, we see that (280 decisions) 4.2% of those who did not punish previously and had no punishing alters did not end up in peace in the following round. Conversely, 5.6% of people who did not punish previously but had punishing neighbors did end up in peace.  
- 
 This suggests possible transport of punishing from new members of the social network, or spontaneous start of punishment by either new or old members. The 104 instances of alter punishment + ego no punishment suggests people may excise punishers from their network to establish peace at a low rate.
  
 ```{r}
@@ -1021,7 +1043,7 @@ We classify punishment into 3 main subtypes:
 # ldata4 - tie component of network-level data
 # ndata1 - node component of network-level data
 # data1 - main aggregated dataset including lag (rounds t-1, t-2, etc.) data
-
+load("~/Documents/Projects/harming_esn/code/exp1/data1_pc.Rdata")
 data1 = data1 %>%
   as_tibble()
 
@@ -1119,19 +1141,6 @@ xtabs(~reactive_p + wealth_inequal, data1_pc_punishes)
 ##### Inequality aversion
 
 ```{r}
-# Statistics
-data1_pc %>%
-  mutate(behaviorTime_sec = behaviorTime/1000) %>%
-  group_by(wealth_inequal) %>%
-  filter(is.na(wealth_inequal) == F) %>%
-  summarize(mean_dt = mean1(behaviorTime_sec),
-            median_dt = median1(behaviorTime_sec),
-            max_dt = max(behaviorTime_sec, na.rm = T),
-            min_dt = min(behaviorTime_sec, na.rm = T),
-            range_dt = range(behaviorTime_sec, na.rm = T))
-```
-
-```{r}
 # Visual
 pun1 = data1_pc %>%
   mutate(behaviorTime_sec = behaviorTime/1000) %>%
@@ -1149,20 +1158,6 @@ pun1 = data1_pc %>%
   guides(colour=guide_legend(title = NULL))
 ```   
 ##### Reactive punishment
-
-```{r}
-# Statistics
-data1_pc %>%
-  mutate(behaviorTime_sec = behaviorTime/1000) %>%
-  group_by(reactive_p) %>%
-  filter(is.na(reactive_p) == F) %>%
-  summarize(mean_dt = mean1(behaviorTime_sec),
-            median_dt = median1(behaviorTime_sec),
-            max_dt = max(behaviorTime_sec, na.rm = T),
-            min_dt = min(behaviorTime_sec, na.rm = T),
-            range_dt = range(behaviorTime_sec, na.rm = T))
-```
-
 ```{r}
 # Visual
 pun2 = data1_pc %>%
@@ -1226,7 +1221,7 @@ data1_pc %>%
   geom_density(adjust = 2) + 
   scale_x_log10(limits = c(1, 110),breaks = c(1, 10, 100)) +
   scale_y_continuous(limits = c(0, 1.3)) +
-  scale_color_manual(labels = c("IA", "RP", "UP", "Other"),
+  scale_color_manual(labels = c("IA", "RP", "UE", "Other"),
                      values = c("#FFBF00", "#DE1A1A", "#29BF12", "#00A5CF")) +
     theme(
         axis.text = element_text(size = rel(1.3)),
@@ -1236,6 +1231,34 @@ data1_pc %>%
   ylab("Density") + 
   ggtitle("Distribution of decision times by punishment subtype - Exp. 1")
 ```
+```{r}
+times_IA = data1_pc %>% filter(wealth_inequal == 1, behavior_punish == 1) %>% select(behaviorTime_sec) %>% pull()
+times_RP = data1_pc %>% filter(reactive_p == 1) %>% select(behaviorTime_sec) %>% pull()
+times_UE = data1_pc %>% filter(unexplained_p== 1) %>% select(behaviorTime_sec) %>% pull()
+
+times_CP = data1_pc %>% 
+  mutate(costly_punish = ifelse(behavior_punish == 1 & local_rate_coop_lag < 0.5, 1, 0)) %>%
+  filter(costly_punish == 1) %>%
+  select(behaviorTime_sec) %>% pull()
+
+mean1(times_IA) 
+mean1(times_IA) + 1.96*se_mean(times_IA)
+mean1(times_IA) - 1.96*se_mean(times_IA)
+
+mean1(times_RP) 
+mean1(times_RP) + 1.96*se_mean(times_RP)
+mean1(times_RP) - 1.96*se_mean(times_RP)
+
+mean1(times_CP) 
+mean1(times_CP) + 1.96*se_mean(times_CP)
+mean1(times_CP) - 1.96*se_mean(times_CP)
+
+
+mean1(times_UE) 
+mean1(times_UE) + 1.96*se_mean(times_UE)
+mean1(times_UE) - 1.96*se_mean(times_UE)
+```
+
 
 ### Experiment 2 data
 

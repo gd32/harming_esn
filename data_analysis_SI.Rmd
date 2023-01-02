@@ -1,0 +1,12 @@
+---
+title: "Supplementary Data Analysis"
+author: "George Dewey, Hiroyasu Ando, Ryo Ikesu, Akihiro Nishi"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This document contains supplementary analyses and figures that are reported in the **Supplementary Materials** of our article, *Spontaneous Peacebuilding and Calculated Harming**.
