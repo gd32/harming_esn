@@ -30,6 +30,17 @@ mean1 = function(x) {mean(x,na.rm=TRUE)}
 median1 = function(x) {median(x, na.rm = TRUE)}
 ```
 
+# Load packages
+```{r}
+library(tidyverse)
+library(igraph)
+library(lme4)
+library(lmerTest)
+library(data.table)
+library(broom.mixed)
+library(patchwork)
+```
+
 # Results
 
 ## Experiment 1 - Descriptive Statistics
@@ -45,7 +56,7 @@ length(unique(data1$superid)) #745 unique participants
 ```
 
 ```{r}
-# Players per game, range
+# Players per game, min, max
 data1 %>%
   group_by(game) %>%
   select(superid) %>%
@@ -83,16 +94,19 @@ mean1(data1$transitivity)
 
 ```{r}
 # Times per behavior
-data1 %>%
-  mutate(behavior = case_when(behavior_coop == 1 ~ "C",
+data1 = data1 %>% mutate(behavior = case_when(behavior_coop == 1 ~ "C",
                               behavior_defect == 1 ~ "D",
                               behavior_punish == 1 ~ "P"),
-         behaviorTime_sec = behaviorTime/1000) %>%
+         behaviorTime_sec = behaviorTime/1000)
+
+data1 %>%
   group_by(behavior) %>%
   filter(behavior %in% c("C", "D", "P")) %>%
   summarize(mean_dt = mean1(behaviorTime_sec))
 
 # Calculating SEs
+data1 = data1 %>%
+  mutate(behaviorTime_sec = behaviorTime/1000)
 times_coop = data1 %>% filter(behavior_coop == 1) %>% select(behaviorTime_sec) %>% pull()
 times_defect = data1 %>% filter(behavior_defect == 1) %>% select(behaviorTime_sec) %>% pull()
 times_punish = data1 %>% filter(behavior_punish == 1) %>% select(behaviorTime_sec) %>% pull()
@@ -114,16 +128,19 @@ round(mean1(times_punish)- 1.96*se_mean(times_punish), 2)
 
 ```{r}
 # Punishment subtypes
+data1_pc = data1_pc %>% 
+  mutate(costly_punish = ifelse(behavior_punish == 1 & local_rate_coop_lag < 0.5, 1, 0),
+         unexplained_p = ifelse(behavior_punish == 1 & wealth_inequal == 0 &reactive_p == 0 &
+                                costly_punish == 0, 1, 0))
 data1_pc %>%
   filter(behavior_punish == 1) %>%
-  mutate(costly_punish = ifelse(behavior_punish == 1 & local_rate_coop_lag < 0.5, 1, 0)) %>%
   group_by(costly_punish) %>%
   summarize(n = n()) #307
 
-prop.test(307, 562)
+prop.test(143, 298)
 
 data1_pc %>%
-  filter(behavior_punish == 1) %>%
+  filter(behavior_punish == 1, showScore == 1) %>%
   group_by(wealth_inequal) %>%
   summarize(n = n()) # 279
 
@@ -139,20 +156,17 @@ data1_pc %>%
   filter(behavior_punish == 1) %>%
   group_by(unexplained_p) %>%
   summarize(n = n()) # 171
-prop.test(171, 562)
+prop.test(115, 562)
 ```
 
 ```{r}
-times_IA = data1_pc %>% filter(wealth_inequal == 1, behavior_punish == 1) %>% select(behaviorTime_sec) %>% pull()
+times_IA = data1_pc %>% filter(wealth_inequal == 1, behavior_punish == 1, showScore == 1) %>% select(behaviorTime_sec) %>% pull()
 times_RP = data1_pc %>% filter(reactive_p == 1) %>% select(behaviorTime_sec) %>% pull()
-times_UE = data1_pc %>% filter(unexplained_p== 1) %>% select(behaviorTime_sec) %>% pull()
-
-times_CP = data1_pc %>% 
-  mutate(costly_punish = ifelse(behavior_punish == 1 & local_rate_coop_lag < 0.5, 1, 0)) %>%
-  filter(costly_punish == 1) %>%
-  select(behaviorTime_sec) %>% pull()
+times_UE = data1_pc %>% filter(unexplained_p == 1) %>% select(behaviorTime_sec) %>% pull()
+times_CP = data1_pc %>%   filter(costly_punish == 1) %>% select(behaviorTime_sec) %>% pull()
 
 mean1(times_IA) 
+se_mean(times_IA)
 mean1(times_IA) + 1.96*se_mean(times_IA)
 mean1(times_IA) - 1.96*se_mean(times_IA)
 
@@ -161,17 +175,72 @@ mean1(times_RP) + 1.96*se_mean(times_RP)
 mean1(times_RP) - 1.96*se_mean(times_RP)
 
 mean1(times_CP) 
+se_mean(times_CP)
 mean1(times_CP) + 1.96*se_mean(times_CP)
 mean1(times_CP) - 1.96*se_mean(times_CP)
 
-
 mean1(times_UE) 
+se_mean(times_UE)
 mean1(times_UE) + 1.96*se_mean(times_UE)
+mean1(times_UE) - 1.96*se_mean(times_UE)
+
 ```
+
+### Sensitivity Analysis 1 - Differences in Decision Times, using log-transformed time
+
+```{r}
+data1 %>%
+  mutate(behavior = case_when(behavior_coop == 1 ~ "C",
+                              behavior_defect == 1 ~ "D",
+                              behavior_punish == 1 ~ "P"),
+         behaviorTime_sec = behaviorTime/1000) %>%
+  group_by(behavior) %>%
+  filter(behavior %in% c("C", "D", "P")) %>%
+  summarize(mean_dt = mean1(log_behaviorTime))
+
+# Calculating SEs
+log_times_coop = data1 %>% filter(behavior_coop == 1) %>% dplyr::select(log_behaviorTime) %>% pull()
+log_times_defect = data1 %>% filter(behavior_defect == 1) %>% dplyr::select(log_behaviorTime) %>% pull()
+log_times_punish = data1 %>% filter(behavior_punish == 1) %>% dplyr::select(log_behaviorTime) %>% pull()
+
+se_mean = function(x) sd(x)/sqrt(length(x))
+
+mean1(log_times_coop)
+round(mean1(log_times_coop)+ 1.96*se_mean(log_times_coop), 2)
+round(mean1(log_times_coop)- 1.96*se_mean(log_times_coop), 2)
+
+mean1(log_times_defect)
+round(mean1(log_times_defect)+ 1.96*se_mean(log_times_defect), 2)
+round(mean1(log_times_defect)- 1.96*se_mean(log_times_defect), 2)
+
+mean1(log_times_punish)
+round(mean1(log_times_punish)+ 1.96*se_mean(log_times_punish), 2)
+round(mean1(log_times_punish)- 1.96*se_mean(log_times_punish), 2)
+```
+
+```{r}
+t.test(log_times_coop, log_times_defect) # p = 0.00026
+t.test(log_times_coop, log_times_punish) # p < 0.0001
+t.test(log_times_defect, log_times_punish) #p < 0.0001
+```
+On the log scale, the T-tests remain significant for all of the comparisons and no confidence intervals overlap.
+
+### Sensitivity Analysis 2 - Adjusting the criteria for cooperation-enforcing harming
+
+```{r}
+data1_pc_sa2 = data1_pc %>%
+    mutate(costly_punish_a = ifelse(behavior_punish == 1 & local_rate_coop_lag < 0.45, 1, 0),
+           costly_punish_b = ifelse(behavior_punish == 1 & local_rate_coop_lag < 0.4, 1, 0),
+           costly_punish_c = ifelse(behavior_punish == 1 & local_rate_coop_lag < 0.35, 1, 0),
+           costly_punish_d = ifelse(behavior_punish == 1 & local_rate_coop_lag < 0.3, 1, 0),
+           costly_punish_e = ifelse(behavior_punish == 1 & local_rate_coop_lag < 0.25, 1, 0)) 
+
+```
+
 
 ## Experiment 1 - Peace Analysis
 
-We build the dataset for the peace analysis by referencing the list of connected players (`ndata1)`.
+We build the dataset for the peace analysis by referencing the list of connected players.
 
 ```{r, message = F, warning = F}
 # PART 1
@@ -203,7 +272,7 @@ ndata_alters = merge(ndata_alters_list, ndata_alters_lag,
 
 behaviors = data1 %>% 
   filter(round != 0) %>%
-  select(superid, game, round, behavior_coop_lag, 
+  select(superid, game, round, behavior, local_rate_punish, behavior_coop_lag, 
          behavior_punish_lag, behavior_defect_lag)
 
 ndata_long_alters = ndata_alters %>%
@@ -212,7 +281,7 @@ ndata_long_alters = ndata_alters %>%
   filter(is.na(alter_id) == F)
 
 pi_status = data1 %>% 
-  select(superid, game, round, peace_individual, behavior_punish_lag)
+  select(superid, game, round, behavior, local_rate_punish, peace_individual, behavior_punish_lag)
 
 punish_lag_status = data1 %>%
   select(superid, game, round, behavior_punish)
@@ -228,13 +297,21 @@ tdata1 = tdata_merged %>%
   group_by(superid, round, game) %>%
   summarize(alter_punish_count = sum(alter_punish_lag)) %>%
   mutate(alter_punish_flag = ifelse(alter_punish_count == 0, 0, 1)) %>%
-  left_join(pi_status, by = c("superid", "game", "round"))
+  left_join(pi_status, by = c("superid", "game", "round")) %>%
+  mutate(harm = ifelse(behavior == "P", 1, 0))
 ```
 
 ```{r}
 # given no punishing alters, 280/6655 decisions = 4.21% of followup decisions are made out of peace
 # additionally, given presence of punishing alters, 104/1845 = 5.64% of followup decisions are made in peace
-xtabs(~peace_individual + behavior_punish_lag + alter_punish_flag, tdata1)
+xtabs(~peace_individual + behavior_punish + alter_punish_flag, tdata1)
+xtabs(~peace_individual + alter_punish_flag, tdata1)
+
+xtabs(~peace_individual + behavior_punish, tdata1)
+
+tdata1 =
+  tdata1 %>%
+  mutate(behavior_punish = ifelse(behavior == "P", 1, 0))
 
 prop.test(280, 6655)
 prop.test(104, 1845)
@@ -242,8 +319,62 @@ prop.test(104, 1845)
 xtabs(~behavior_punish_lag + peace_individual, data1)
 sum(xtabs(~behavior_punish_lag + peace_individual, data1))
 
+xtabs(~behavior_punish_lag + alter_punish_flag + harm, tdata1)
+
+tdata2 = tdata1 %>%
+  filter(behavior_punish_lag == 0, alter_punish_flag == 0)
+
+xtabs(~harm + alter_punish_flag, tdata2)
 # individual peace proportion
 prop.test(6518, 10727)
+```
+```{r}
+# Part 2 of peace analysis
+# First, break down into 4 categories: harm + harmers, harm + noharmers, no harm
+# + harmers, no harm + no harmers (all in round t-1)
+
+# Get count
+xtabs(~behavior_punish + peace_individual, tdata1)
+xtabs(~peace_individual + current_social_env, tdata2)
+# Create as variable type
+tdata2 = tdata1 %>% 
+  mutate(last_round_type = case_when(behavior_punish_lag == 0 & alter_punish_flag == 0 ~ "NN",
+                                     behavior_punish_lag == 0 & alter_punish_flag == 1 ~ "NH",
+                                     behavior_punish_lag == 1 & alter_punish_flag == 0 ~ "HN",
+                                     behavior_punish_lag == 1 & alter_punish_flag == 1 ~ "HH"),
+         current_social_env = ifelse(local_rate_punish == 0, "Peace", "Nonpeace"),
+         current_round_type = case_when(behavior != "P" & current_social_env == "Peace" ~ "NN",
+                                        behavior != "P" & current_social_env == "Nonpeace" ~ "NH",
+                                        behavior == "P" & current_social_env == "Peace" ~ "HN",
+                                        behavior == "P" & current_social_env == "Nonpeace" ~ "HH"))
+tdata2 %>% 
+  filter(last_round_type == "NN") %>%
+  group_by(current_round_type) %>%
+  summarize(n = n()) %>%
+  na.omit() %>%
+  mutate(perc = n/sum(n))
+
+tdata2 %>% 
+  filter(last_round_type == "NH") %>%
+  group_by(current_round_type) %>%
+  summarize(n = n()) %>%
+  na.omit() %>%
+  mutate(perc = n/sum(n)) 
+
+
+tdata2 %>% 
+  filter(last_round_type == "HN") %>%
+  group_by(current_round_type) %>%
+  summarize(n = n()) %>%
+  na.omit() %>%
+  mutate(perc = n/sum(n)
+        
+tdata2 %>% 
+  filter(last_round_type == "HH") %>%
+  group_by(current_round_type) %>%
+  summarize(n = n()) %>%
+  na.omit() %>%
+  mutate(perc = n/sum(n)) 
 ```
 
 ## Experiment 2 - Descriptive Statistics
@@ -258,6 +389,12 @@ tpdata_pc %>%
             min_players = min(n),
             max_players = max(n))
 
+tpdata_pc = tpdata_pc %>%
+    mutate(costly_punish = ifelse(behavior_punish == 1 & local_rate_coop_lag < 0.5, 1, 0),
+           unexplained_p = ifelse(behavior_punish == 1 & reactive_p == 0 & 
+                                    costly_punish == 0 &
+                                    wealth_inequal == 0, 1, 0))
+# All P
 tpdata_pc %>%
   filter(behavior == "P") %>%
   group_by(tp_on) %>%
@@ -277,6 +414,376 @@ tpdata_pc %>%
 
 # CO
 tpdata_pc %>%
+  filter(costly_punish == 1) %>%
+  group_by(tp_on) %>%
+  summarize(n = n())
+
+#UN
+tpdata_pc %>%
+  filter(unexplained_p == 1) %>%
+  group_by(tp_on) %>%
+  summarize(n = n())
+
+# for all p
+prop.test(373, 1580) #TP-
+prop.test(239, 1629) #TP+
+
+# for RE
+prop.test(200, 1580)
+prop.test(102, 1629)
+
+# for CO
+prop.test(136, 1580)
+prop.test(133, 1629)
+
+# for IN
+prop.test(171, 1580)
+prop.test(141, 1629)
+
+#for UN
+prop.test(79, 1580)
+prop.test(32, 1629)
+```
+
+# Figures
+
+## Figure 1A (Left)
+
+```{r}
+data_behavior = read.csv("/Users/gdewey/Library/CloudStorage/Dropbox/Active-AN22HARM-NatEE/Data/figures/data_behavior.csv")
+
+data_behavior <- as.data.table(data_behavior)
+data_behavior[,X:=NULL]
+str(data_behavior)
+
+# Define mean +/- SE
+data_behavior[, mean_plus_se := Mean + SE]
+data_behavior[, mean_minus_se := Mean - SE]
+
+ggplot(data = data_behavior, aes(x = Type, y = Mean)) +
+  geom_bar(stat = "identity")
+
+fig1A_L = ggplot(
+  data = data_behavior,
+  aes(x = Type, y = Mean, fill = Type)) +
+  geom_bar(stat = "identity", width = 0.75, alpha = 0.5) +
+  geom_errorbar(aes(ymin = mean_minus_se, ymax = mean_plus_se, color = Type), width = 0) +
+  theme_classic() +
+  xlab('') +
+  ylab("Decision time (seconds)") + 
+  scale_y_continuous(limits = c(0, 13), breaks = seq(0, 13, by = 2), expand = c(0, 0)) +
+  scale_x_discrete(breaks = c("Coop", "Defect", "Punish"),
+                   labels=c("Cooperation", "Defection", "Harming"),
+                   ) + 
+  scale_fill_manual(values = c("#00A5CF", "#FFBF00", "#574AE2")) +
+  scale_color_manual(values = c("dodgerblue4", "darkorange3", "#574AE2")) +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        legend.position = "none",
+        axis.ticks = element_blank(),
+        axis.text.x = element_text(size = 10),
+        axis.text.y = element_text(size = 10),
+        axis.title.y = element_text(size = 10))
+```                         
+## Figure 1A (Right)
+
+```{r}
+data_punish_type <- read.csv("/Users/gdewey/Library/CloudStorage/Dropbox/Active-AN22HARM-NatEE/Data/figures/data_punish_type.csv")
+data_punish_type <- as.data.table(data_punish_type)
+data_punish_type[,X:=NULL]
+str(data_punish_type)
+
+# Define mean +/- SE
+data_punish_type[, mean_plus_se := Mean + SE]
+data_punish_type[, mean_minus_se := Mean - SE]
+
+fig1A_R = ggplot(
+  data = data_punish_type,
+  aes(x = Type, y = Mean, fill = Type)) +
+  geom_bar(stat = "identity", width = 0.65, alpha = 0.5) +
+  geom_errorbar(aes(ymin = mean_minus_se, ymax = mean_plus_se, color = Type), width = 0) +
+  theme_classic() +
+  scale_y_continuous(limits = c(0, 13), breaks = seq(0, 13, by = 2), expand = c(0, 0)) +
+  scale_x_discrete(breaks = c("Inequality aversion", "Retaliation", "Unexplained", "Coop enforcing"),
+                   labels=c("Inequality- \naverse \nharming", "Retaliation \nharming", "Unexplained \nharming", "Cooperation- \nenforcing \nharming")) + 
+  scale_fill_manual(values = c("mediumpurple1", "mediumpurple2", "mediumpurple3", "mediumpurple4")) +
+  scale_color_manual(values = c("mediumpurple1", "mediumpurple2", "mediumpurple3", "mediumpurple4")) +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        legend.position = "none",
+        axis.line.y = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank())
+```
+
+## Combined Figure 1A
+
+```{r}
+fig1A_L + fig1A_R 
+```
+
+## Figure 1B
+
+```{r}
+library(heemod)
+library(diagram)
+
+mat_dim <- define_transition(
+  state_names = c
+  ('Harm with harmers', 'Harm without harmers',
+   'No harm with harmers', 'No harm without harmers'),
+  ., .05,
+  .05, .95)
+
+plot(mat_dim,
+     box.size = 0.125,
+     self.shiftx = c(-0.1, 0.1),
+     self.shifty = c(-0.15, 0.15))
+```
+
+
+## Figure 2B (Left)
+
+```{r}
+# P
+prop.test(373, 1580) #TP-
+prop.test(239, 1629) #TP+
+
+# D
+prop.test(370, 1580) #TP-
+prop.test(684, 1629) #TP+
+
+# C
+prop.test(837, 1580) #TP-
+prop.test(706, 1629) #TP+
+```
+
+```{r}
+fig2B_L_data = read_csv("/Users/gdewey/Library/CloudStorage/Dropbox/Active-AN22HARM-NatEE/Data/figures/fig2BL.csv")
+
+fig2B_L = fig2B_L_data %>%
+  mutate(LL = perc - 1.96*se,
+         UL = perc + 1.96*se) %>%
+  ggplot(aes(x = factor(behavior), y = perc)) + 
+  geom_pointrange(aes(ymin = LL, ymax = UL, color = factor(tp_on)), fatten = 4) +
+  geom_errorbar(aes(ymin = LL, ymax = UL, color = factor(tp_on)), width = 0.05) +
+  theme_bw() +
+  xlab("")+
+  ylab("Proportion")+
+  scale_y_continuous(limits = c(0.1, 0.6)) +
+  scale_x_discrete(breaks = c("C", "D", "P"),
+                   labels = c("Cooperation", "Defection", "Harm")) +
+  scale_color_manual(name = "Time Pressure", 
+                     values = c("#FFBF00", "#00A5CF"),
+                     labels = c("Inactive", "Active")) +
+  theme(panel.grid.minor.x = element_blank(),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size = 8),
+        axis.text.y = element_text(size = 8),
+        axis.title.y = element_text(size = 8),
+        legend.title = element_text())
+```
+
+## Figure 2B (Right)
+
+```{r}
+fig2B_R_data = read_csv(file = "/Users/gdewey/Library/CloudStorage/Dropbox/Active-AN22HARM-NatEE/Data/figures/fig2BR.csv")
+
+fig2B_R = fig2B_R_data %>%
+  mutate(UL = perc + 1.96*se,
+         LL = perc - 1.96*se) %>%
+  ggplot(aes(x = factor(pun_type), y = perc)) + 
+  geom_pointrange(aes(ymin = LL, ymax = UL, color = factor(tp_on)), fatten = 4) +
+  geom_errorbar(aes(ymin = LL, ymax = UL, color = factor(tp_on)), width = 0.05) +
+  theme_bw() +
+  xlab("")+
+  ylab("Proportion")+
+  scale_y_continuous(limits = c(0, 0.25)) +
+  scale_x_discrete(breaks = c(1, 2, 3, 4),
+                   labels = c("Inequality \naversion", "Retaliation", "Cooperation \nenforcing",  "Unexplained")) +
+  scale_color_manual(name = "Time Pressure", 
+                     values = c("#FFBF00", "#00A5CF"),
+                     labels = c("Inactive", "Active")) +
+  theme(panel.grid.minor.x = element_blank(),
+        axis.text.x = element_text(size = 8),
+        axis.text.y = element_text(size = 8),
+        axis.title.y = element_text(size = 8),
+        legend.title = element_text())
+```
+## Combined Figure 2B
+
+```{r}
+fig2B_L + fig2B_R +
+  plot_layout(widths = c(1, 2), guides = "collect") +
+  plot_annotation(tag_levels = "A") & 
+  theme(plot.tag = element_text(size = 6))
+```
+
+# Regression Models
+
+## Model Set 1
+
+### Model 1.1: Choosing punishment vs. wealth visibility
+
+```{r}
+m1.1 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag+ factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+se = sqrt(diag(vcov(m1.1)))
+# table of estimates with 95% CI
+tab_m1.1 = cbind(Est = fixef(m1.1), LL = fixef(m1.1) - 1.96 * se, UL = fixef(m1.1) + 1.96 * se)
+round(exp(tab_m1.1), digits = 3)[1:11,]
+```
+
+### Model 1.2: Choosing cooperation vs. wealth visibility
+
+```{r}
+m1.2 = glmer(behavior_coop ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag+ factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+se = sqrt(diag(vcov(m1.2)))
+# table of estimates with 95% CI
+tab_m1.2 = cbind(Est = fixef(m1b), LL = fixef(m1b) - 1.96 * se, UL = fixef(m1b) + 1.96 * se)
+round(exp(tab_m1.2), digits = 3)[1:11,]
+```
+
+### Model 1.3: Choosing defection vs. wealth visibility
+
+```{r}
+m1.3 = glmer(behavior_defect ~ showScore + age + gender + behavior_coop_lag + local_rate_defect_lag + behavior_defect_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag+ factor(round) + (1|game) + (1|superid), data = data1_cc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+se = sqrt(diag(vcov(m1.3)))
+# table of estimates with 95% CI
+tab_m1.3 = cbind(Est = fixef(m1.3), LL = fixef(m1.3) - 1.96 * se, UL = fixef(m1.3) + 1.96 * se)
+round(exp(tab_m1.3), digits = 3)[1:11,]
+```
+
+
+```{r}
+tpdata_pc = tpdata_pc %>%
+  mutate(behavior_punish = ifelse(behavior == "P" & is.na(behavior) == 0, 1, 0),
+         behavior_coop = ifelse(behavior == "C" & is.na(behavior) == 0, 1, 0),
+         behavior_defect = ifelse(behavior == "D" & is.na(behavior) == 0, 1, 0))
+
+data_lag = tpdata_pc %>% select(superid, round, initial_score, payoff, 
+                                    cumulativePayoff, cPayoffS, WealthLevel, 
+                                    behavior_coop, local_rate_coop, 
+                                    behavior_defect, local_rate_defect, 
+                                    behavior_punish, local_rate_punish, 
+                                  degree, happ, behaviorTime)
+names(data_lag)[-c(1,2)] = paste0(names(data_lag)[-c(1,2)],"_lag")
+data_lag$round = data_lag$round + 1
+tpdata_pc = merge(x=tpdata_pc,y=data_lag,all.x=T,all.y=F,by=c("superid","round"))
+```
+
+## Experiment 1 Data - Models 8-11
+
+To show the main effect of the experimental condition (either `showScore` or `tp_on`), we use a shortened model. We regress using Experiment 1 data for proof of concept.
+
+### Model 8: All punishment in Exp. 1
+
+```{r}
+m8 = glmer(behavior_punish ~ showScore + age + gender + factor(round) + (1|game) + (1|superid), data = data1_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m8, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(4) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+### Model 9: IA in Exp. 1
+
+```{r}
+m9 = glmer(wealth_inequal ~ showScore + age + gender + factor(round) + (1|game) + (1|superid), data = data1_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m9, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(4) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+### Model 10: RP in Exp. 1
+
+```{r}
+m10 = glmer(reactive_p ~ showScore + age + gender + factor(round) + (1|game) + (1|superid), data = data1_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m10, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(4) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+### Model 11: UP in Exp. 1
+
+```{r}
+m11 = glmer(unexplained_p ~ showScore + age + gender + factor(round) + (1|game) + (1|superid), data = data1_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m11, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(4) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Experiment 2 Data - Models 12-15
+
+```{r}
+dim(tpdata_pc)
+```
+
+```{r, message = F, warning = F}
+tpdata_pc %>% 
+  group_by(superid) %>%
+  summarize(n = n())
+
+tpdata_pc %>% 
+  group_by(tp_on, behavior) %>%
+  filter(behavior %in% c("C", "D", "P")) %>%
+  summarize(n = n())
+```
+
+```{r}
+# frequencies
+# all p
+tpdata_pc %>%
+  filter(behavior == "P") %>%
+  group_by(tp_on) %>%
+  summarize(n = n())
+
+# IA
+tpdata_pc %>%
+  filter(wealth_inequal == 1, behavior == "P") %>%
+  group_by(tp_on) %>%
+  summarize(n = n())
+
+# RP
+tpdata_pc %>%
+  filter(reactive_p == 1) %>%
+  group_by(tp_on) %>%
+  summarize(n = n())
+
+# CP
+tpdata_pc %>%
   mutate(costly_punish = ifelse(behavior_punish == 1 & local_rate_coop_lag < 0.5, 1, 0)) %>%
   filter(costly_punish == 1) %>%
   group_by(tp_on) %>%
@@ -289,4 +796,306 @@ binom.confint(239, 1629) #TP+
 # for RP
 binom.confint(200, 1580)
 binom.confint(102, 1629)
+```
+
+```{r}
+# times
+tpdata_pc %>%
+  filter(behavior == "P") %>%
+  group_by(tp_on) %>%
+  summarize(mean_dt = mean1(behaviorTime))
+
+tpdata_pc %>%
+  filter(wealth_inequal == 1) %>%
+  group_by(tp_on) %>%
+  summarize(mean_dt = mean1(behaviorTime))
+
+tpdata_pc %>%
+  filter(reactive_p == 1) %>%
+  group_by(tp_on) %>%
+  summarize(mean_dt = mean1(behaviorTime))
+
+tpdata_pc %>%
+  filter(unexplained_p == 1) %>%
+  group_by(tp_on) %>%
+  summarize(mean_dt = mean1(behaviorTime))
+
+tpdata_pc %>%
+  filter(reactive_p_neg == 1) %>%
+  group_by(tp_on) %>%
+  summarize(mean_dt = mean1(behaviorTime))
+
+tpdata_pc %>%
+  filter(costly_punish == 1) %>%
+  group_by(tp_on) %>%
+  summarize(mean_dt = mean1(behaviorTime))
+
+
+```
+
+### Model 12: All punishment in Exp. 2
+
+```{r}
+m12 = glmer(behavior_punish ~ tp_on + factor(round) + (1|game) + (1|superid), data = tpdata_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+tidy(m12, conf.int=TRUE, exponentiate=T) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(2) %>%
+  kbl() %>%
+      kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+#### Model 12 (linear)
+
+```{r}
+m12_lin = lmer(behavior_punish ~ tp_on + factor(round) + (1|game) + (1|superid), data = tpdata_pc)
+tidy(m12_lin, conf.int = TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(2) %>%
+  kbl() %>%
+      kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+### Model 13: IA (+) in Exp. 2
+
+```{r}
+m13 = glmer(wealth_inequal ~ tp_on + factor(round) + (1|game) + (1|superid), data = tpdata_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m13, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(2) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+
+#### Model 13 (linear)
+
+```{r}
+m13_lin = lmer(wealth_inequal ~ tp_on + factor(round) + (1|game) + (1|superid), data = tpdata_pc)
+
+# output with p-values
+tidy(m13_lin, conf.int=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(2) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+### Model 13b: IA(-) in Exp. 2
+
+```{r}
+tpdata_pc = tpdata_pc %>%
+  mutate(wealth_inequal_neg = ifelse(wealth_inequal == 0 & behavior_punish == 1, 1, 0))
+
+tpdata_pc %>%
+  filter(wealth_inequal == 1, behavior_punish == 1) %>%
+  group_by(tp_on) %>%
+  summarize(n = n())
+
+tpdata_pc %>%
+  group_by(tp_on, wealth_inequal_neg) %>%
+  filter(wealth_inequal_neg %in% 0:1) %>%
+  summarize(n = n())
+
+# 194/1580 0.1228
+# 96/1629 0.0628
+```
+
+```{r}
+m13b= glmer(wealth_inequal_neg ~ tp_on + factor(round) + (1|game) + (1|superid), data = tpdata_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m13b, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(2) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+#### Model 13b (linear)
+
+```{r}
+m13b_lin = lmer(wealth_inequal_neg ~ tp_on + factor(round) + (1|game) + (1|superid), data = tpdata_pc)
+
+# output with p-values
+tidy(m13b_lin, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(2) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+
+### Model 14: RP (+) in Exp. 2
+
+```{r}
+m14 = glmer(reactive_p ~ tp_on + factor(round) + (1|game) + (1|superid), data = tpdata_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m14, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(2) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+#### Model 14 (linear)
+
+```{r}
+m14_lin = lmer(reactive_p ~ tp_on + factor(round) + (1|game) + (1|superid), data = tpdata_pc)
+
+# output with p-values
+tidy(m14_lin, conf.int=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(2) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+### Model 14b: RP (-) in Exp. 2
+
+```{r}
+m14b = glmer(reactive_p_neg ~ tp_on + factor(round) + (1|game) + (1|superid), data = tpdata_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m14b, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(2) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+#### Model 14b (linear)
+
+```{r}
+m14b_lin = lmer(reactive_p_neg ~ tp_on + factor(round) + (1|game) + (1|superid), data = tpdata_pc)
+
+# output with p-values
+tidy(m14b_lin, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(2) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+```{r}
+prop.test(c(370, 280), c(1629, 1580))
+```
+
+### Model 15: UP in Exp. 2
+
+```{r}
+m15 = glmer(unexplained_p ~ tp_on + factor(round) + (1|game) + (1|superid), data = tpdata_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m15, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(2) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+#### Model 15 (linear)
+
+```{r}
+m15_lin = lmer(unexplained_p ~ tp_on + factor(round) + (1|game) + (1|superid), data = tpdata_pc)
+
+# output with p-values
+tidy(m15_lin, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(2) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+### Model 16: Cooperation in Exp. 2
+
+```{r}
+m16 = glmer(behavior_coop ~ tp_on + factor(round) + (1|game) + (1|superid), data = tpdata_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m16, conf.int=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(2)
+```
+
+```{r}
+m17 = glmer(behavior_defect ~ tp_on + factor(round) + (1|game) + (1|superid), data = tpdata_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m17, conf.int=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(2)
+```
+
+### Model 18: Behavioral model for cooperation
+
+```{r}
+m17 = glmer(behavior_coop ~ tp_on + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + (1|game) + (1|superid), data = tpdata_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+tidy(m17, conf.int = TRUE, exponentiate = TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(11) 
 ```
