@@ -18,7 +18,10 @@ This R Markdown document contains the data analysis and visualization code for t
 load("~/Documents/Projects/harming_esn/code/exp1/data1_pc_v2.Rdata") 
 
 # Experiment 2 data
-load("~/Documents/Projects/harming_esn/code/exp2/tpdata_pc_v2.Rdata")
+exp2data = read_csv("~/Documents/Projects/harming_esn/data/exp2/exp2data_complete.csv", show_col_types = F)
+
+# Experiment 3 data
+load("~/Documents/Projects/harming_esn/data/exp3/exp3data_pc_v2.Rdata")
 ```
 
 # Load helper functions
@@ -31,7 +34,8 @@ se_mean = function(x) sd1(x)/sqrt(sum(is.na(x) == 0))
 ```
 
 # Load packages
-```{r}
+
+```{r, message = F, warning = F}
 library(tidyverse)
 library(igraph)
 library(lme4)
@@ -118,6 +122,16 @@ fig1data1 = fig1data1 %>%
 fig1data1 = fig1data1 %>%
   mutate(prop = count/total,
          se_count = sqrt(prop*(1-prop)/total))
+
+data1_behavior_times
+```
+```{r}
+data1_pc %>%
+  group_by(behavior)
+  filter(behavior %in% c("C", "D", "P")) %>%
+  summarize(mean_dt = mean1(behaviorTime/1000),
+            se_mean_dt = se_mean(behaviorTime/1000))
+
 ```
 
 ```{r}
@@ -155,11 +169,13 @@ data1_pc %>%
   group_by(retaliation_neg) %>%
   summarize(n = n()) #307
 ```
+
 ```{r}
 data1_pc %>%
   group_by(costly_punish) %>%
   summarize(n = n()) #307
 ```
+
 ```{r}
 data1_pc %>%
   filter(behavior_punish == 1, showScore == 1) %>%
@@ -176,6 +192,7 @@ times_ia_plus_exp1 = data1_pc %>%
          pos_neg = "+") %>%
   select(harm_type_base, pos_neg, mean_dt, se_mean_dt)
 ```
+
 ```{r}
 times_ia_minus_exp1 = data1_pc %>%
   filter(inequality_averse_neg == 1, behavior_punish == 1) %>%
@@ -375,6 +392,7 @@ xtabs(~harm + alter_punish_flag, tdata2)
 # individual peace proportion
 prop.test(6518, 10727)
 ```
+
 ```{r}
 # Part 2 of peace analysis
 # First, break down into 4 categories: harm + harmers, harm + noharmers, no harm
@@ -426,7 +444,7 @@ tdata2 %>%
 ## Experiment 2 - Descriptive Statistics
 
 ```{r}
-tpdata_pc %>%
+exp2data %>%
   group_by(game) %>%
   select(superid) %>%
   unique() %>%
@@ -448,15 +466,40 @@ tpdata_pc = tpdata_pc %>%
          costly_pun_neg = ifelse(behavior == "P" & costly_punish == 0, 1, 0))
 ```
 
-
 ```{r}
-# Counts - all harming
-tpdata_pc %>%
-  filter(behavior == "P") %>%
-  group_by(time_pressure) %>%
-  count()
+# Counts/proportions - all behaviors
+exp2data %>%
+  filter(round > 0) %>%
+  group_by(behavior) %>%
+  count() %>%
+  filter(behavior %in% c("C", "D", "P")) %>%
+  ungroup() %>%
+  mutate(prop = n/sum(n))
+
+exp2data %>%
+  filter(round > 0, time_pressure == "Minus") %>%
+  group_by(behavior) %>%
+  count() %>%
+  filter(behavior %in% c("C", "D", "P")) %>%
+  ungroup() %>%
+  mutate(prop = n/sum(n))
+
+exp2data %>%
+  filter(round > 0, time_pressure == "Plus") %>%
+  group_by(behavior) %>%
+  count() %>%
+  filter(behavior %in% c("C", "D", "P")) %>%
+  ungroup() %>%
+  mutate(prop = n/sum(n))
 ```
 
+```{r}
+#Exp2 times
+exp2data %>%
+  filter(round >0) %>%
+  group_by(behavior, time_pressure) %>%
+  summarize(mean_dt = mean1(behaviorTime/1000))
+```
 
 ```{r}
 # Retaliation
@@ -465,12 +508,14 @@ tpdata_pc %>%
   group_by(time_pressure) %>%
   summarize(n = n())
 ```
+
 ```{r}
 tpdata_pc %>%
   filter(retaliation_neg == 1) %>%
   group_by(time_pressure) %>%
   count()
 ```
+
 ```{r}
 times_re_plus = tpdata_pc %>%
   filter(retaliation_harm == 1) %>%
@@ -490,6 +535,7 @@ times_re_minus = tpdata_pc %>%
   mutate(harm_type = "RE-") %>%
   select(harm_type, time_pressure, mean_dt, se_mean_dt)
 ```
+
 ```{R}
 # Cooperation-enhancing
 tpdata_pc %>%
@@ -550,6 +596,7 @@ times_ia_plus = tpdata_pc %>%
   mutate(harm_type = "IA+") %>%
   select(harm_type, time_pressure, mean_dt, se_mean_dt)
 ```
+
 ```{r}
 times_ia_minus =  tpdata_pc %>%
   filter(inequality_averse_neg == 1) %>%
@@ -632,8 +679,6 @@ write_csv(fig2data_2, file = "~/Documents/Projects/harming_esn/data/for_visuals/
 ## Experiment 2 - Peace Analysis
 
 ```{r}
-load("~/Documents/Projects/harming_esn/code/exp2/tpdata_tpoff.Rdata") #TP-
-load("~/Documents/Projects/harming_esn/code/exp2/tpdata_tpon.Rdata") #TP+
 load("~/Documents/Projects/harming_esn/code/exp2/tpdata_pc.Rdata")
 load("~/Documents/Projects/harming_esn/code/exp2/ndata1_tp.Rdata")
 
@@ -808,14 +853,504 @@ xtabs(~behavior_punish_lag + social_env_lag + time_pressure, tpdata_pc_modified)
 # all harm = 78+103+87+76 = 344
 ```
 
+## Experiment 3 - Descriptive Statistics
+
+```{r}
+exp3data_pc %>%
+  group_by(game) %>%
+  count() # 20 games
+```
+
+```{r}
+# Counting stats
+exp3data_pc %>%
+  group_by(game) %>%
+  select(superid) %>%
+  unique() %>%
+  summarize(n = n()) %>%
+  summarize(mean_players = mean(n),
+            min_players = min(n),
+            max_players = max(n))
+
+exp3data_pc %>%
+  group_by(time_pressure) %>%
+  count()
+```
+
+```{r}
+# Proportions
+exp3data_pc %>%
+  group_by(behavior) %>%
+  summarize(n = n()) %>%
+  filter(behavior %in% c("C", "D", "P")) %>%
+  mutate(perc = n/sum(n))
+# All: C = 0.321, D = 0.577, P = 0.101
+
+# By TP status
+exp3data_pc %>%
+  filter(time_pressure == "Minus") %>%
+  group_by(behavior) %>%
+  summarize(n = n()) %>%
+  filter(behavior %in% c("C", "D", "P")) %>%
+  mutate(perc = n/sum(n))
+# TP-: C = 0.457, D = 0.554, P = 0.098
+
+exp3data_pc %>%
+  filter(time_pressure == "Plus") %>%
+  group_by(behavior) %>%
+  summarize(n = n()) %>%
+  filter(behavior %in% c("C", "D", "P")) %>%
+  mutate(perc = n/sum(n))
+# TP+: C = 0.297, D = 0.598, P = 0.104
+```
+
+```{r}
+# Decision times
+exp3data_pc %>%
+  group_by(behavior) %>%
+  summarize(mean_dt = mean1(behaviorTime)/1000)
+
+# By TP status
+exp3data_pc %>%
+  filter(time_pressure == "Minus") %>%
+  group_by(behavior) %>%
+  summarize(mean_dt = mean1(behaviorTime)/1000)
+# C: 3.535, D: 3.241, H: 3.839
+
+exp3data_pc %>%
+  filter(time_pressure == "Plus") %>%
+  group_by(behavior) %>%
+  summarize(mean_dt = mean1(behaviorTime)/1000)
+# C: 3.183, D: 3.097, H: 3.462
+```
+
+### Create summary datasets
+
+```{r}
+# For C/D/P behaviors
+exp3_fig_data1 = tibble(
+  behavior = rep(c("C", "D", "P"), 2),
+  time_pressure = rep(c("Minus","Plus"),3),
+  count = c(707, 1128, 200, 655, 1316, 230),
+  total = c(2040, 2040, 2040, 2203, 2203, 2203),
+  )
+
+exp3_times_minus = exp3data_pc %>%
+  filter(time_pressure == "Minus") %>%
+  group_by(behavior) %>%
+  summarize(mean_dt = mean1(behaviorTime/1000),
+            se_mean_dt = se_mean(behaviorTime/1000)) %>%
+  filter(is.na(behavior) == F) %>%
+  mutate(time_pressure = "Minus")
+
+exp3_times_plus = exp3data_pc %>%
+  filter(time_pressure == "Plus") %>%
+  group_by(behavior) %>%
+  summarize(mean_dt = mean1(behaviorTime/1000),
+            se_mean_dt = se_mean(behaviorTime/1000)) %>%
+  filter(is.na(behavior) == F) %>%
+  mutate(time_pressure = "Plus")
+
+exp3_fig_data2 = bind_rows(exp3_times_minus, exp3_times_plus) 
+
+exp3_fig_left_data = merge(exp3_fig_data1, exp3_fig_data2, by = c("behavior", "time_pressure")) %>%
+  mutate(behavior = ifelse(behavior == "P", "H", behavior),
+         prop = count/total,
+         se_prop = sqrt(prop/(1-prop)/total)) 
+
+write_csv(exp3_fig_left_data, file = "~/Documents/Projects/harming_esn/data/for_visuals/fig3data_1.csv")
+
+fig3_data1 = read_csv("~/Documents/Projects/harming_esn/data/for_visuals/fig3data_1.csv", show_col_types = F)
+fig3_data2 = read_csv("~/Documents/Projects/harming_esn/data/for_visuals/fig3data_2.csv", show_col_types = F)
+```
+
+
+```{r}
+exp3_tp_minus_times = exp3data_pc %>%
+  filter(time_pressure == "Minus") %>%
+  select(behaviorTime) %>%
+  pull() / 1000 
+
+exp3_tp_plus_times = exp3data_pc %>%
+  filter(time_pressure == "Plus") %>%
+  select(behaviorTime) %>%
+  pull() / 1000 
+
+t.test(exp3_tp_minus_times, exp3_tp_plus_times)
+
+exp3_tp_minus_coop_times = exp3data_pc %>%
+  filter(time_pressure == "Minus", behavior == "C") %>%
+  select(behaviorTime) %>%
+  pull() / 1000 
+
+exp3_tp_plus_coop_times = exp3data_pc %>%
+  filter(time_pressure == "Plus", behavior == "C") %>%
+  select(behaviorTime) %>%
+  pull() / 1000 
+
+exp3_tp_minus_def_times = exp3data_pc %>%
+  filter(time_pressure == "Minus", behavior == "D") %>%
+  select(behaviorTime) %>%
+  pull() / 1000 
+
+exp3_tp_plus_def_times = exp3data_pc %>%
+  filter(time_pressure == "Plus", behavior == "D") %>%
+  select(behaviorTime) %>%
+  pull() / 1000 
+
+exp3_tp_minus_harm_times = exp3data_pc %>%
+  filter(time_pressure == "Minus", behavior == "P") %>%
+  select(behaviorTime) %>%
+  pull() / 1000 
+
+exp3_tp_plus_harm_times = exp3data_pc %>%
+  filter(time_pressure == "Plus", behavior == "P") %>%
+  select(behaviorTime) %>%
+  pull() / 1000 
+
+t.test(exp3_tp_minus_coop_times, exp3_tp_plus_coop_times)
+t.test(exp3_tp_minus_def_times, exp3_tp_plus_def_times)
+t.test(exp3_tp_minus_harm_times, exp3_tp_plus_harm_times)
+```
+### For punishment subtypes
+```{r}
+exp3_fig_data3 = tibble(
+  harm_type = c(rep("RE+", 2), rep("RE-", 2), rep("CE+", 2), rep("CE-", 2), rep("IA+", 2), rep("IA-",2)),
+  time_pressure = rep(c("Plus", "Minus"), 6),
+  count = c(95, 81, 119, 105, 161, 135, 53, 49, 164, 152, 66, 47),
+  total = c(rep(c(2203, 2040), 6))
+)
+
+exp3_fig_data3 = exp3_fig_data3 %>%
+  mutate(prop = count/total,
+         se_prop = sqrt(prop/(1-prop)/total)) %>%
+  left_join(exp3_times, by = c("harm_type", "time_pressure"))
+
+write_csv(exp3_fig_data3, file = "~/Documents/Projects/harming_esn/data/for_visuals/fig3data_2.csv")
+```
+
+```{r}
+# Count - by arm
+# Exclude round 0 data
+exp3data_pc = exp3data_pc %>% filter(round > 0) %>% 
+  mutate(costly_punish = ifelse(behavior_punish == 1 & local_rate_coop_lag < 0.5, 1, 0),
+         unexplained_p = ifelse(behavior_punish == 1 & wealth_inequal == 0 & retaliation_harm == 0 &
+                                costly_punish == 0, 1, 0),
+         inequality_averse_neg = ifelse(behavior == "P" & wealth_inequal == 0, 1, 0),
+         retaliation_neg = ifelse(behavior == "P" & retaliation_harm == 0, 1, 0),
+         costly_pun_neg = ifelse(behavior == "P" & costly_punish == 0, 1, 0)) 
+```
+
+```{r}
+exp3data_pc = exp3data_pc %>%
+  rename(time_pressure = time_pressure.x)
+
+# Counts - all harming
+exp3data_pc %>%
+  filter(behavior == "P") %>%
+  group_by(time_pressure) %>%
+  count() 
+```
+
+```{r}
+# Retaliation
+exp3data_pc %>%
+  filter(retaliation_harm == 1) %>%
+  group_by(time_pressure) %>%
+  summarize(n = n())
+```
+
+```{r}
+exp3data_pc %>%
+  filter(retaliation_neg == 1) %>%
+  group_by(time_pressure) %>%
+  count()
+```
+
+```{r}
+times_re_plus = exp3data_pc %>%
+  filter(retaliation_harm == 1) %>%
+  group_by(time_pressure) %>%
+  summarize(mean_dt = mean1(behaviorTime/1000),
+            se_mean_dt = sd1(behaviorTime/1000)/sqrt(sum(is.na(behaviorTime) == 0))) %>%
+  mutate(harm_type = "RE+") %>%
+  select(harm_type, time_pressure, mean_dt, se_mean_dt)
+```
+
+```{r}
+times_re_minus = exp3data_pc %>%
+  filter(retaliation_neg == 1) %>%
+  group_by(time_pressure) %>%
+  summarize(mean_dt = mean1(behaviorTime/1000),
+            se_mean_dt = sd1(behaviorTime/1000)/sqrt(sum(is.na(behaviorTime) == 0))) %>%
+  mutate(harm_type = "RE-") %>%
+  select(harm_type, time_pressure, mean_dt, se_mean_dt)
+```
+
+```{R}
+# Cooperation-enhancing
+exp3data_pc %>%
+  filter(costly_punish == 1) %>%
+  group_by(time_pressure) %>%
+  count()
+```
+
+```{r}
+exp3data_pc %>%
+  filter(costly_pun_neg == 1) %>%
+  group_by(time_pressure) %>%
+  count()
+```
+
+```{r}
+times_ce_plus =  exp3data_pc %>%
+  filter(costly_punish == 1) %>%
+  group_by(time_pressure) %>%
+  summarize(mean_dt = mean1(behaviorTime/1000),
+            se_mean_dt = sd1(behaviorTime/1000)/sqrt(sum(is.na(behaviorTime) == 0))) %>%
+  mutate(harm_type = "CE+") %>%
+  select(harm_type, time_pressure, mean_dt, se_mean_dt)
+```
+
+```{r}
+times_ce_minus = exp3data_pc %>%
+  filter(costly_pun_neg == 1) %>%
+  group_by(time_pressure) %>%
+  summarize(mean_dt = mean1(behaviorTime/1000),
+            se_mean_dt = sd1(behaviorTime/1000)/sqrt(sum(is.na(behaviorTime) == 0))) %>%
+  mutate(harm_type = "CE-") %>%
+  select(harm_type, time_pressure, mean_dt, se_mean_dt)
+```
+
+```{r}
+# Inequality-averse
+exp3data_pc %>%
+  filter(wealth_inequal == 1, behavior == "P") %>%
+  group_by(time_pressure) %>%
+  summarize(n = n())
+```
+
+```{r}
+# Inequality-averse negative
+exp3data_pc %>%
+  filter(inequality_averse_neg == 1) %>%
+  group_by(time_pressure) %>%
+  count()
+```
+
+```{r}
+times_ia_plus = exp3data_pc %>%
+  filter(wealth_inequal == 1, behavior_punish == 1) %>%
+  group_by(time_pressure) %>%
+  summarize(mean_dt = mean1(behaviorTime/1000),
+            se_mean_dt = sd1(behaviorTime/1000)/sqrt(sum(is.na(behaviorTime) == 0))) %>%
+  mutate(harm_type = "IA+") %>%
+  select(harm_type, time_pressure, mean_dt, se_mean_dt)
+```
+
+```{r}
+times_ia_minus =  exp3data_pc %>%
+  filter(inequality_averse_neg == 1) %>%
+  group_by(time_pressure) %>%
+  summarize(mean_dt = mean1(behaviorTime/1000),
+            se_mean_dt = sd1(behaviorTime/1000)/sqrt(sum(is.na(behaviorTime) == 0))) %>%
+  mutate(harm_type = "IA-") %>%
+  select(harm_type, time_pressure, mean_dt, se_mean_dt)
+```
+
+```{r}
+exp3_times = bind_rows(times_re_plus, times_re_minus, times_ce_plus, times_ce_minus, times_ia_plus, times_ia_minus)
+```
+
+```{r}
+#Unexplained
+exp3data_pc %>%
+  filter(unexplained_p == 1) %>%
+  group_by(time_pressure) %>%
+  summarize(n = n())
+```
+
+```{r}
+# All harming
+prop.test(c(200, 230), c(2040, 2203), correct = F) # p = 0.53
+
+# for RE
+prop.test(c(81, 95), c(2040, 2203), correct = F) # p = 0.577
+
+# for CE
+prop.test(c(135, 161), c(2040, 2203), correct = F) # p = 0.3776
+
+# for IA
+prop.test(c(152, 164), c(2040, 2203), correct = F) # p = 0.9935
+```
+
+## Experiment 3 - Peace Analysis
+
+```{r}
+load("~/Documents/Projects/harming_esn/data/exp3/ndata1_exp3.Rdata")
+```
+
+```{r}
+# Create the list of alters by superid
+ndata_alters_list = ndata1 %>% 
+  select(round, game, starts_with("id")) %>%
+  filter(round != 0) %>%
+  mutate(across(starts_with("id"), ~100*game+parse_number(.))) %>%
+  rename(superid = id)
+
+names(ndata_alters_list)[4:19] = c("alter1", "alter2", "alter3", "alter4", 
+                                   "alter5", "alter6", "alter7", "alter8",
+                                   "alter9", "alter10", "alter11", "alter12",
+                                   "alter13", "alter14", "alter15", "alter16")
+
+ndata_alters_lag = ndata_alters_list
+names(ndata_alters_lag)[4:19] = paste0("lag_",names(ndata_alters_lag)[4:19])
+ndata_alters_lag$round = ndata_alters_lag$round+1
+
+ndata_alters = merge(ndata_alters_list, ndata_alters_lag, 
+                     by = c("superid", "round", "game")) %>%
+  arrange(superid, round)
+
+ndata_long_alters = ndata_alters %>%
+  select(superid, round, game, starts_with("lag")) %>%
+  pivot_longer(cols = starts_with("lag"), values_to = "alter_id") %>%
+  filter(is.na(alter_id) == F)
+
+pi_status = exp3data_pc %>% 
+  as_tibble() %>%
+  select(superid, game, round, time_pressure, behavior_punish, local_rate_punish, behavior_punish_lag) %>%
+  rename(e_behavior_punish = behavior_punish, 
+         e_behavior_punish_lag = behavior_punish_lag)
+
+punish_lag_status = tpdata_pc %>%
+  select(superid, game, round, e_behavior_punish)
+
+tdata_merged_tp3 = ndata_long_alters %>%
+  left_join(pi_status, by = c("superid", "round", "game")) %>%
+  mutate(prev_round = round-1) %>%
+  rename(behavior_punish = e_behavior_punish,
+         behavior_punish_lag = e_behavior_punish_lag) %>%
+  left_join(punish_lag_status, by = c("alter_id" = "superid", "game", "prev_round" = "round")) %>%
+  rename(alter_punish_lag = e_behavior_punish) %>%
+  select(superid, time_pressure, game, round, prev_round, name, alter_id, behavior_punish, local_rate_punish, behavior_punish_lag, alter_punish_lag)
+
+tpdata_pc_modified = tdata_merged_tp3 %>%
+  group_by(superid, round, game) %>%
+  summarize(local_count_punish_lag = sum(alter_punish_lag)) %>%
+  mutate(social_env_lag = ifelse(local_count_punish_lag == 0, "Not harming", "Harming")) %>%
+  left_join(pi_status, by = c("superid", "game", "round")) %>%
+  rename(behavior_punish = e_behavior_punish,
+         behavior_punish_lag = e_behavior_punish_lag)
+
+exp3data_modified = tpdata_pc_modified %>%
+  mutate(last_round_type = case_when(behavior_punish_lag == 0 & social_env_lag == "Not harming" ~ "NN",
+                                     behavior_punish_lag == 0 & social_env_lag == "Harming" ~ "NH",
+                                     behavior_punish_lag == 1 & social_env_lag == "Not harming" ~ "HN",
+                                     behavior_punish_lag == 1 & social_env_lag == "Harming" ~ "HH"),
+         social_env = ifelse(local_rate_punish == 0, "Not harming", "Harming"),
+         current_round_type = case_when(behavior_punish == 0 & social_env == "Not harming" ~ "NN",
+                                        behavior_punish == 0 & social_env == "Harming" ~ "NH",
+                                        behavior_punish == 1 & social_env == "Not harming" ~ "HN",
+                                        behavior_punish == 1 & social_env == "Harming" ~ "HH"))
+```
+
+```{r}
+# Check the numbers of harming
+exp3data_modified %>%
+  group_by(time_pressure) %>%
+  filter(behavior_punish == 1) %>%
+  count()
+# les
+```
+```{R}
+# TP+
+exp3data_modified %>%
+  filter(time_pressure == "Plus") %>%
+  group_by(last_round_type) %>%
+  count()
+```
+```{R}
+exp3data_modified %>% 
+  filter(last_round_type == "NN", time_pressure == "Plus") %>%
+  group_by(current_round_type) %>%
+  summarize(n = n()) %>%
+  mutate(perc = n/sum(n)) #harm total = 23 +57 = 80
+```
+```{r}
+exp3data_modified %>% 
+  filter(last_round_type == "NH", time_pressure == "Plus") %>%
+  group_by(current_round_type) %>%
+  summarize(n = n()) %>%
+  mutate(perc = n/sum(n)) #harm total = 43 +16 = 59
+```
+
+```{r}
+exp3data_modified %>% 
+  filter(last_round_type == "HN", time_pressure == "Plus") %>%
+  group_by(current_round_type) %>%
+  summarize(n = n()) %>%
+  mutate(perc = n/sum(n)) #harm total = 18+28 = 46
+```
+
+```{r}
+exp3data_modified %>% 
+  filter(last_round_type == "HH", time_pressure == "Plus") %>%
+  group_by(current_round_type) %>%
+  summarize(n = n()) %>%
+  mutate(perc = n/sum(n))  #harm total = 24+11 = 35
+
+
+```{R}
+# TP-
+exp3data_modified %>%
+  filter(time_pressure == "Minus") %>%
+  group_by(last_round_type) %>%
+  count()
+```
+
+```{R}
+exp3data_modified %>% 
+  filter(last_round_type == "NN", time_pressure == "Minus") %>%
+  group_by(current_round_type) %>%
+  summarize(n = n()) %>%
+  mutate(perc = n/sum(n)) #harm total = 29+49 = 78
+```
+
+```{r}
+exp3data_modified %>% 
+  filter(last_round_type == "NH", time_pressure == "Minus") %>%
+  group_by(current_round_type) %>%
+  summarize(n = n()) %>%
+  mutate(perc = n/sum(n)) #harm total = 76+27 = 103
+```
+
+```{r}
+exp3data_modified %>% 
+  filter(last_round_type == "HN", time_pressure == "Minus") %>%
+  group_by(current_round_type) %>%
+  summarize(n = n()) %>%
+  mutate(perc = n/sum(n)) #harm total = 25+62 = 87
+```
+
+```{r}
+exp3data_modified %>% 
+  filter(last_round_type == "HH", time_pressure == "Minus") %>%
+  group_by(current_round_type) %>%
+  summarize(n = n()) %>%
+  mutate(perc = n/sum(n)) #harm total = 51+25 = 76
+```
+```{R}
+xtabs(~behavior_punish_lag + social_env_lag + time_pressure, exp3data_modified)
+```
+
 # Figures
 
 ## Figure 1
 
 ```{r}
 # Load figure data
-fig1data1 = read_csv("~/Documents/Projects/harming_esn/data/for_visuals/fig1data_1.csv")
-fig1data2 = read_csv("~/Documents/Projects/harming_esn/data/for_visuals/fig1data_2.csv")
+fig1data1 = read_csv("~/Documents/Projects/harming_esn/data/for_visuals/fig1data_1.csv", show_col_types = F)
+fig1data2 = read_csv("~/Documents/Projects/harming_esn/data/for_visuals/fig1data_2.csv", show_col_types = F)
 ```
 
 ```{r}
@@ -830,16 +1365,21 @@ fig1A = fig1data1 %>%
   theme_classic() +
   scale_y_continuous(limits = c(0, 0.6), breaks = seq(0, 0.6, by = 0.2), expand = c(0, 0)) +
   ylab("Proportion")+
-  scale_x_discrete(breaks = c("C", "D", "P"),
-                   labels= c("C", "D", "H")) + 
+  facet_grid(~behavior, 
+             scales = "free_x", # Let the x axis vary across facets.
+             space = "free_x",  # Let the width of facets vary and force all bars to have the same width.
+             switch = "x") +   # Move the facet labels to the bottom.
   scale_fill_manual(values = c("#00A5CF", "#FFBF00", "#574AE2")) +
   scale_color_manual(values = c("dodgerblue4", "darkorange3", "#574AE2")) +
   theme(panel.grid.minor = element_blank(),
         panel.grid.major = element_blank(),
         legend.position = "none",
         axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
         axis.ticks.y = element_blank())
+
+fig1A
 ```
 
 ```{r}
@@ -871,6 +1411,7 @@ fig1B = fig1data2 %>%
         strip.background = element_rect(fill = "white"),
         )  # Make facet label background white.
 ```
+
 ```{r}
 # Fig 1C
 fig1C = fig1data1 %>%
@@ -885,7 +1426,7 @@ fig1C = fig1data1 %>%
              scales = "free_x", # Let the x axis vary across facets.
              space = "free_x",  # Let the width of facets vary and force all bars to have the same width.
              switch = "x") +   # Move the facet labels to the bottom.
-  scale_x_discrete(breaks = c("C", "D", "P"),
+  scale_x_discrete(breaks = c("C", "D", "H"),
                    labels= c("C", "D", "H")) + 
   scale_fill_manual(values = c("#00A5CF", "#FFBF00", "#574AE2")) +
   scale_color_manual(values = c("dodgerblue4", "darkorange3", "#574AE2")) +
@@ -937,12 +1478,12 @@ fig1D = fig1data2 %>%
   plot_layout(nrow = 2)
 ```
 
-
 ## Figure 2
 
 ```{r}
 # Load the figure data
-fig2data_1 = read_csv("~/Documents/Projects/harming_esn/data/for_visuals/fig2data_1.csv")
+fig2data_1 = read_csv("~/Documents/Projects/harming_esn/data/for_visuals/fig2data_1.csv", show_col_types = F)
+fig2data_2 = read_csv("~/Documents/Projects/harming_esn/data/for_visuals/fig2data_2.csv", show_col_types = F)
 ```
 
 ```{R}
@@ -958,7 +1499,11 @@ fig2C = fig2data_1 %>%
   theme_classic() +
   scale_y_continuous(limits = c(0, 0.6), breaks = seq(0, 0.6, by = 0.2), expand = c(0, 0)) +
   ylab("Proportion")+
-  scale_x_discrete(breaks = c("C", "D", "P"),
+  facet_grid(~ behavior, 
+             scales = "free_x", # Let the x axis vary across facets.
+             space = "free_x",  # Let the width of facets vary and force all bars to have the same width.
+             switch = "x") +   # Move the facet labels to the bottom.
+  scale_x_discrete(breaks = c("C", "D", "H"),
                    labels= c("C", "D", "H")) + 
   scale_fill_manual(values = c("#00A5CF", "#FFBF00", "#574AE2")) +
   scale_color_manual(values = c("dodgerblue4", "darkorange3", "#574AE2")) +
@@ -966,6 +1511,7 @@ fig2C = fig2data_1 %>%
         panel.grid.major = element_blank(),
         legend.position = "none",
         axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
         axis.ticks.y = element_blank())
 ```
@@ -1003,6 +1549,7 @@ fig2D = fig2data_2 %>%
         strip.background = element_rect(fill = "white"),
         )  # Make facet label background white.
 ```
+
 ```{R}
 # Fig 2E
 fig2E = fig2data_1 %>%
@@ -1016,8 +1563,12 @@ fig2E = fig2data_1 %>%
   theme_classic() +
   scale_y_continuous(limits = c(0, 0.6), breaks = seq(0, 0.6, by = 0.2), expand = c(0, 0)) +
   ylab("Proportion")+
-  scale_x_discrete(breaks = c("C", "D", "P"),
+  scale_x_discrete(breaks = c("C", "D", "H"),
                    labels= c("C", "D", "H")) + 
+  facet_grid(~ behavior, 
+             scales = "free_x", # Let the x axis vary across facets.
+             space = "free_x",  # Let the width of facets vary and force all bars to have the same width.
+             switch = "x") +   # Move the facet labels to the bottom.
   scale_fill_manual(values = c("#00A5CF", "#FFBF00", "#574AE2")) +
   scale_color_manual(values = c("dodgerblue4", "darkorange3", "#574AE2")) +
   theme(panel.grid.minor = element_blank(),
@@ -1025,6 +1576,7 @@ fig2E = fig2data_1 %>%
         legend.position = "none",
         axis.title.x = element_blank(),
         axis.ticks.x = element_blank(),
+        axis.text.x = element_blank(),
         axis.ticks.y = element_blank(),
         axis.title.y = element_blank(),
 )
@@ -1063,6 +1615,7 @@ fig2F = fig2data_2 %>%
         strip.background = element_rect(fill = "white"),
         )  # Make facet label background white.
 ```
+
 ```{r}
 # Fig 2G
 fig2G = fig2data_1 %>%
@@ -1091,6 +1644,7 @@ fig2G = fig2data_1 %>%
         axis.title.y = element_text(size = 7.5),
         axis.ticks.y = element_blank())
 ```
+
 ```{r}
 # Fig 2H
 fig2H = fig2data_2 %>%
@@ -1151,6 +1705,7 @@ fig2I = fig2data_1 %>%
         axis.title.y = element_blank(),
         axis.ticks.y = element_blank())
 ```
+
 ```{r}
 # Fig 2J
 fig2J = fig2data_2 %>%
@@ -1183,7 +1738,7 @@ fig2J = fig2data_2 %>%
         )  # Make facet label background white.
 ```
 
-## Table for figure 2
+### Table for figure 2
 
 ```{r}
 tpdata_pc %>%
@@ -1222,6 +1777,266 @@ fig2table_t = tibble(
   plot_layout(nrow = 4) 
 ```
 
+## Figure 3 
+
+```{r}
+fig3A = fig3_data1 %>%
+  filter(time_pressure == "Minus") %>%
+  mutate(mean_plus_se = prop + se_prop,
+         mean_minus_se = prop - se_prop) %>%
+  ggplot() +
+  aes(x = behavior, y = prop, fill = behavior) +
+  geom_bar(stat = "identity", width = 0.75, alpha = 0.5) +
+  geom_errorbar(aes(ymin = mean_minus_se, ymax = mean_plus_se, color = factor(behavior)), width = 0) +
+  theme_classic() +
+  scale_y_continuous(limits = c(0, 0.6), breaks = seq(0, 0.6, by = 0.2), expand = c(0, 0)) +
+  ylab("Proportion")+
+  facet_grid(~ behavior, 
+             scales = "free_x", # Let the x axis vary across facets.
+             space = "free_x",  # Let the width of facets vary and force all bars to have the same width.
+             switch = "x") +   # Move the facet labels to the bottom.
+  scale_x_discrete(breaks = c("C", "D", "H"),
+                   labels= c("C", "D", "H")) + 
+  scale_fill_manual(values = c("#00A5CF", "#FFBF00", "#574AE2")) +
+  scale_color_manual(values = c("dodgerblue4", "darkorange3", "#574AE2")) +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank())
+```
+
+```{r}
+fig3B = fig3_data2 %>%
+  mutate(pos_neg_grouping = factor(substr(harm_type, 3, 3), levels = c("+", "-")),
+         harm_type_base = substr(harm_type, 0, 2)) %>%
+  filter(time_pressure == "Minus") %>%
+  mutate(mean_plus_se = prop + se_prop,
+         mean_minus_se = prop - se_prop) %>%
+  ggplot() +
+  aes(x = pos_neg_grouping, y = prop, fill = harm_type) +
+  geom_bar(stat = "identity", position = position_dodge(), alpha = 0.5) +
+  geom_errorbar(aes(ymin = prop - se_prop, ymax = prop + se_prop, color = harm_type), 
+                position = position_dodge(0.9), width = 0) +
+  scale_y_continuous(limits = c(0, 0.15), breaks = seq(0, 0.15, by = 0.05), expand = c(0, 0)) +
+  ylab("Proportion")+
+  theme_classic() +
+  facet_grid(~ harm_type_base, 
+             scales = "free_x", # Let the x axis vary across facets.
+             space = "free_x",  # Let the width of facets vary and force all bars to have the same width.
+             switch = "x") +   # Move the facet labels to the bottom.
+  scale_fill_manual(values = c( "thistle1", "slateblue4", "thistle1", "slateblue2", "thistle1", "orchid4"))+
+  scale_color_manual(values = c( "thistle1", "slateblue4", "thistle1", "slateblue2", "thistle1", "orchid4"))+
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.title.y = element_blank(),
+        strip.placement = "outside",                      # Place facet labels outside x axis labels.
+        strip.background = element_rect(fill = "white"),
+        )  # Make facet label background white.
+```
+
+```{R}
+# Fig 3C
+fig3c = fig3_data1 %>%
+  filter(time_pressure == "Plus") %>%
+  mutate(mean_plus_se = prop + se_prop,
+         mean_minus_se = prop - se_prop) %>%
+  ggplot() +
+  aes(x = behavior, y = prop, fill = behavior) +
+  geom_bar(stat = "identity", width = 0.75, alpha = 0.5) +
+  geom_errorbar(aes(ymin = mean_minus_se, ymax = mean_plus_se, color = factor(behavior)), width = 0) +
+  theme_classic() +
+  scale_y_continuous(limits = c(0, 0.6), breaks = seq(0, 0.6, by = 0.2), expand = c(0, 0)) +
+  ylab("Proportion")+
+  scale_x_discrete(breaks = c("C", "D", "H"),
+                   labels= c("C", "D", "H")) + 
+  facet_grid(~ behavior, 
+             scales = "free_x", # Let the x axis vary across facets.
+             space = "free_x",  # Let the width of facets vary and force all bars to have the same width.
+             switch = "x") +   # Move the facet labels to the bottom.
+  scale_fill_manual(values = c("#00A5CF", "#FFBF00", "#574AE2")) +
+  scale_color_manual(values = c("dodgerblue4", "darkorange3", "#574AE2")) +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.title.y = element_blank(),
+)
+```
+
+```{r}
+#Fig 3d
+fig3d = fig3_data2 %>%
+  mutate(pos_neg_grouping = factor(substr(harm_type, 3, 3), levels = c("+", "-")),
+         harm_type_base = substr(harm_type, 0, 2)) %>%
+  filter(time_pressure == "Plus") %>%
+  mutate(mean_plus_se = prop + se_prop,
+         mean_minus_se = prop - se_prop) %>%
+  ggplot() +
+  aes(x = pos_neg_grouping, y = prop, fill = harm_type) +
+  geom_bar(stat = "identity", position = position_dodge(), alpha = 0.5) +
+  geom_errorbar(aes(ymin = prop - se_prop, ymax = prop + se_prop, color = harm_type), 
+                position = position_dodge(0.9), width = 0) +
+  scale_y_continuous(limits = c(0, 0.15), breaks = seq(0, 0.15, by = 0.05), expand = c(0, 0)) +
+  ylab("Proportion")+
+  theme_classic() +
+  facet_grid(~ harm_type_base, 
+             scales = "free_x", # Let the x axis vary across facets.
+             space = "free_x",  # Let the width of facets vary and force all bars to have the same width.
+             switch = "x") +   # Move the facet labels to the bottom.
+  scale_fill_manual(values = c( "thistle1", "slateblue4", "thistle1", "slateblue2", "thistle1", "orchid4"))+
+  scale_color_manual(values = c( "thistle1", "slateblue4", "thistle1", "slateblue2", "thistle1", "orchid4"))+
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.title.y = element_blank(),
+        strip.placement = "outside",                      # Place facet labels outside x axis labels.
+        strip.background = element_rect(fill = "white"),
+        )  # Make facet label background white.
+```
+
+```{r}
+# Fig 3e
+fig3e = fig3_data1 %>%
+  filter(time_pressure == "Minus") %>%
+  ggplot() +
+  aes(x = behavior, y = mean_dt, fill = behavior) +
+  geom_bar(stat = "identity", width = 0.9, alpha = 0.5) +
+  geom_errorbar(aes(ymin = mean_dt - se_mean_dt, ymax = mean_dt + se_mean_dt, color = factor(behavior)), width = 0) +
+  theme_classic() +
+  scale_y_continuous(limits = c(0, 5), breaks = seq(0, 5, by = 2), expand = c(0, 0)) +
+  ylab("Decision time (seconds)")+
+  facet_grid(~behavior, 
+             scales = "free_x", # Let the x axis vary across facets.
+             space = "free_x",  # Let the width of facets vary and force all bars to have the same width.
+             switch = "x") +   # Move the facet labels to the bottom.
+  scale_x_discrete(breaks = c("C", "D", "P"),
+                   labels= c("C", "D", "H")) + 
+  scale_fill_manual(values = c("#00A5CF", "#FFBF00", "#574AE2")) +
+  scale_color_manual(values = c("dodgerblue4", "darkorange3", "#574AE2")) +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.y = element_text(size = 7.5),
+        axis.ticks.y = element_blank())
+```
+
+```{r}
+# Fig 3f
+fig3f = fig3_data2 %>%
+  mutate(pos_neg_grouping = factor(substr(harm_type, 3, 3), levels = c("+", "-")),
+         harm_type_base = substr(harm_type, 0, 2)) %>%
+  filter(time_pressure == "Minus") %>%
+  ggplot() +
+  aes(x = pos_neg_grouping, y = mean_dt, fill = harm_type) +
+  geom_bar(stat = "identity", position = position_dodge(), alpha = 0.5) +
+  geom_errorbar(aes(ymin = mean_dt - se_mean_dt, ymax = mean_dt + se_mean_dt, color = harm_type), 
+                position = position_dodge(0.9), width = 0) +
+  scale_y_continuous(limits = c(0, 6), breaks = seq(0, 6, by = 2), expand = c(0, 0)) +
+  ylab("Decision time (seconds)")+
+  theme_classic() +
+  facet_grid(~ harm_type_base, 
+             scales = "free_x", # Let the x axis vary across facets.
+             space = "free_x",  # Let the width of facets vary and force all bars to have the same width.
+             switch = "x") +   # Move the facet labels to the bottom.
+  scale_fill_manual(values = c( "thistle1", "slateblue4", "thistle1", "slateblue2", "thistle1", "orchid4"))+
+  scale_color_manual(values = c( "thistle1", "slateblue4", "thistle1", "slateblue2", "thistle1", "orchid4"))+
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        strip.placement = "outside",                      # Place facet labels outside x axis labels.
+        strip.background = element_rect(fill = "white"),
+        )  # Make facet label background white.
+```
+
+```{r}
+# Fig 3g
+fig3g = fig3_data1 %>%
+  filter(time_pressure == "Plus") %>%
+  ggplot() +
+  aes(x = behavior, y = mean_dt, fill = behavior) +
+  geom_bar(stat = "identity", width = 0.9, alpha = 0.5) +
+  geom_errorbar(aes(ymin = mean_dt - se_mean_dt, ymax = mean_dt + se_mean_dt, color = factor(behavior)), width = 0) +
+  theme_classic() +
+  scale_y_continuous(limits = c(0, 5), breaks = seq(0, 5, by = 2), expand = c(0, 0)) +
+  ylab("Decision time (seconds)")+
+  facet_grid(~behavior, 
+             scales = "free_x", # Let the x axis vary across facets.
+             space = "free_x",  # Let the width of facets vary and force all bars to have the same width.
+             switch = "x") +   # Move the facet labels to the bottom.
+  scale_x_discrete(breaks = c("C", "D", "P"),
+                   labels= c("C", "D", "H")) + 
+  scale_fill_manual(values = c("#00A5CF", "#FFBF00", "#574AE2")) +
+  scale_color_manual(values = c("dodgerblue4", "darkorange3", "#574AE2")) +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.ticks.y = element_blank())
+```
+
+```{r}
+# Fig 3h
+fig3h = fig2data_2 %>%
+  mutate(pos_neg_grouping = factor(substr(harm_type, 3, 3), levels = c("+", "-")),
+         harm_type_base = substr(harm_type, 0, 2)) %>%
+  filter(time_pressure == "Plus") %>%
+  ggplot() +
+  aes(x = pos_neg_grouping, y = mean_dt, fill = harm_type) +
+  geom_bar(stat = "identity", position = position_dodge(), alpha = 0.5) +
+  geom_errorbar(aes(ymin = mean_dt - se_mean_dt, ymax = mean_dt + se_mean_dt, color = harm_type), 
+                position = position_dodge(0.9), width = 0) +
+  scale_y_continuous(limits = c(0, 6), breaks = seq(0, 6, by = 2), expand = c(0, 0)) +
+  ylab("Decision time (seconds)")+
+  theme_classic() +
+  facet_grid(~ harm_type_base, 
+             scales = "free_x", # Let the x axis vary across facets.
+             space = "free_x",  # Let the width of facets vary and force all bars to have the same width.
+             switch = "x") +   # Move the facet labels to the bottom.
+  scale_fill_manual(values = c( "thistle1", "slateblue4", "thistle1", "slateblue2", "thistle1", "orchid4"))+
+  scale_color_manual(values = c( "thistle1", "slateblue4", "thistle1", "slateblue2", "thistle1", "orchid4"))+
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.title.y = element_blank(),
+        strip.placement = "outside",                      # Place facet labels outside x axis labels.
+        strip.background = element_rect(fill = "white"),
+        )  # Make facet label background white.
+```
+
+### Combined Figure 3
+
+```{r}
+(fig3A | fig3B | fig3c | fig3d) / 
+(fig3e | fig3f | fig3g | fig3h) +
+  plot_layout(nrow = 2) +
+  plot_annotation(title = "Experiment 3, TP- (left) vs. TP+ (right)")
+```
 
 ## Figure 2B (Right)
 
@@ -1248,7 +2063,17 @@ fig2B_R = fig2B_R_data %>%
         axis.text.y = element_text(size = 8),
         axis.title.y = element_text(size = 8),
         legend.title = element_text())
+
+fig2B_R
 ```
+
+
+## Figure 4 
+
+```{r}
+
+```
+
 
 # Regression Models
 
@@ -1283,7 +2108,6 @@ se = sqrt(diag(vcov(m1.3)))
 tab_m1.3 = cbind(Est = fixef(m1.3), LL = fixef(m1.3) - 1.96 * se, UL = fixef(m1.3) + 1.96 * se)
 round(exp(tab_m1.3), digits = 3)[1:11,]
 ```
-
 
 ```{r}
 tpdata_pc = tpdata_pc %>%
@@ -1509,7 +2333,6 @@ tidy(m13, conf.int=TRUE, exponentiate=TRUE) %>%
     kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
 ```
 
-
 #### Model 13 (linear)
 
 ```{r}
@@ -1578,7 +2401,6 @@ tidy(m13b_lin, conf.int=TRUE, exponentiate=TRUE) %>%
   kbl() %>%
     kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
 ```
-
 
 ### Model 14: RP (+) in Exp. 2
 
@@ -1717,13 +2539,94 @@ tidy(m17, conf.int=TRUE) %>%
 ### Model 18: Behavioral model for cooperation
 
 ```{r}
-m17 = glmer(behavior_coop ~ time_pressure + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + (1|game) + (1|superid), data = tpdata_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+m18 = glmer(behavior_coop ~ time_pressure + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag + factor(round) + (1|game) + (1|superid), data = tpdata_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 
-tidy(m17, conf.int = TRUE, exponentiate = TRUE) %>%
+tidy(m18, conf.int = TRUE, exponentiate = TRUE) %>%
   select(term, estimate, conf.low, conf.high, p.value) %>%
   rename(Term = term, Estimate = estimate, 
          LL = conf.low, UL = conf.high, p = p.value) %>%
   mutate(across(where(is.numeric), round, 4)) %>%
   select(Term, Estimate, LL, UL, p) %>%
   head(11) 
+```
+
+## Experiment 3 Data 
+
+```{r}
+exp3data_pc
+```
+
+### Model 19: All punishment (Exp. 3)
+
+```{r}
+m19 = glmer(behavior_punish ~ time_pressure + factor(round) + (1|game) + (1|superid), data = exp3data_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m19, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(2) 
+```
+
+### Model 20: IA+ in Exp 3
+
+```{r}
+m20 = glmer(wealth_inequal ~ time_pressure + factor(round) + (1|game) + (1|superid), data = exp3data_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m20, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(2) 
+```
+
+### Model 21: RE+ in Exp. 3
+
+```{r}
+m21 = glmer(retaliation_harm ~ time_pressure + factor(round) + (1|game) + (1|superid), data = exp3data_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m21, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(2)
+```
+
+### Model 22: CP+ in Exp. 3
+
+```{r}
+m22 = glmer(costly_punish ~ time_pressure + factor(round) + (1|game) + (1|superid), data = exp3data_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m22, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(2)
+```
+
+### Model 23: Cooperation in Exp. 3
+
+```{r}
+m23 = glmer(behavior_coop ~ time_pressure + factor(round) + (1|game) + (1|superid), data = exp3data_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# output with p-values
+tidy(m23, conf.int=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(2)
 ```

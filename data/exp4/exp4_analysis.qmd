@@ -1,0 +1,226 @@
+---
+title: "Time Pressure Exp4 Findings"
+format: pdf
+editor: visual
+---
+
+## Load data and initial setup
+
+```{r}
+#| message = F
+setwd("~/Documents/Projects/harming_esn/Data/exp4/")
+load("exp4_mdata3.Rdata")
+
+library(tidyverse)
+library(lme4)
+library(lmerTest)
+library(simr)
+library(kableExtra)
+
+mean1 = function(x) {mean(x,na.rm=TRUE)}
+median1 = function(x) {median(x, na.rm = TRUE)}
+sd1 = function(x) {sd(x, na.rm = TRUE)}
+se_mean = function(x) sd1(x)/sqrt(sum(is.na(x) == 0))
+
+harmdata = mdata3 %>% as_tibble() %>%
+  mutate(behavior = case_when(behavior_coop == 1 ~ "C",
+                              behavior_defect == 1 ~ "D",
+                              behavior_punish == 1 ~ "P"),
+         time_pressure = ifelse(str_detect(gameID, "TP") == T, "Plus", "Minus"))
+
+harmdata$timeUp = unlist(harmdata$timeUp.x)
+```
+
+## Question 1: Is harming slower in the TP- condition?
+
+```{r}
+harmdata %>%
+  filter(time_pressure == "Minus", round > 0, is.na(behavior) == FALSE) %>%
+  group_by(behavior) %>%
+  summarize(mean_dt = mean1(behaviorTime/1000),
+            se_mean_dt = se_mean(behaviorTime/1000),
+            median_dt = median1(behaviorTime/1000)) %>%
+  kbl() %>%
+  kable_styling()
+```
+
+Just looking at means, the decision time for harming is definitely slower (3.96s average vs 3.25 for C for 2.96 for D). We can do a quick t-test to verify:
+
+```{r}
+times_coop = harmdata %>% filter(time_pressure == "Minus", round > 0, is.na(behavior) == FALSE, behavior_coop == 1) %>% select(behaviorTime) %>% pull() / 1000
+
+times_defect = harmdata %>% filter(time_pressure == "Minus", round > 0, is.na(behavior) == FALSE, behavior_defect == 1) %>% select(behaviorTime) %>% pull() / 1000
+
+times_harm = harmdata %>% filter(time_pressure == "Minus", round > 0, is.na(behavior) == FALSE, behavior_punish == 1) %>% select(behaviorTime) %>% pull() / 1000
+
+t.test(times_coop, times_harm)$p.val
+t.test(times_defect, times_harm)$p.val 
+```
+
+So the difference between cooperation times and punish times is marginally significant (not adjusting for game structure).
+
+## Question 2: How many people decide within 3 seconds in the TP- condition? in 4 seconds?
+
+```{r}
+harmdata %>%
+  filter(time_pressure == "Minus", round > 0, is.na(behavior) == FALSE) %>%
+  mutate(time_within_3 = ifelse(behaviorTime/1000 <= 3, "Yes", "No")) %>%
+  group_by(time_within_3) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(perc = n/sum(n)) %>%
+  kbl() %>%
+  kable_styling()
+```
+
+```{r}
+harmdata %>%
+  filter(time_pressure == "Plus", round > 0, is.na(behavior) == FALSE) %>%
+  group_by(timeUp) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(perc = n/sum(n)) %>%
+  kbl() %>%
+  kable_styling()
+```
+
+The rate of decisions being made in 3s or less is a bit higher in the TP+ condition (70.2% in TP- vs 73.8% in TP+). **Does this suggest that only 3.6% of timeouts are avoided under TP (where the TP is making people speed up their decisions?)**
+
+```{r}
+harmdata %>%
+  filter(time_pressure == "Minus", round > 0, is.na(behavior) == FALSE) %>%
+  mutate(time_within_4 = ifelse(behaviorTime/1000 <= 4, "Yes", "No")) %>%
+  group_by(time_within_4) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(perc = n/sum(n))  %>%
+  kbl() %>%
+  kable_styling()
+```
+
+Extending the time limit to 4 seconds adds 8% of decisions to be included.
+
+## Question 3: Distribution of timeout vs. previous behavior
+
+```{r}
+data_lag = harmdata %>% 
+  select(superid, round, behavior, degree, behaviorTime) %>%
+  mutate(round = round + 1)
+  
+names(data_lag)[-c(1,2)] = paste0(names(data_lag)[-c(1,2)],"_lag")
+data_lag$round = data_lag$round + 1
+
+harmdata2 = merge(x=harmdata,y=data_lag,all.x=T,all.y=F,by=c("superid","round"))
+
+harmdata2 %>%
+  filter(time_pressure == "Plus", round > 0, is.na(behavior_lag) == F) %>%
+  group_by(timeUp, behavior_lag) %>%
+  count() %>%
+  ungroup() %>%
+  group_by(timeUp) %>%
+  mutate(perc = n/sum(n)) %>%
+  kbl() %>%
+  kable_styling()
+```
+
+10% of timeouts were last-round harmers, compared to only 4.6% in non-timeouts.
+
+## Question 4: Does cooperation decay over time or does it start low? What about harming?
+
+```{r}
+harmdata %>%
+  filter(round > 0, time_pressure == "Minus") %>%
+  group_by(round) %>%
+  summarize(coop_rate = mean1(behavior_coop)) %>%
+  round(3) %>%
+  kbl() %>%
+  kable_styling() 
+```
+
+In the TP- condition, cooperation starts lower and has a slight decrease after round 10:
+
+```{r}
+harmdata %>%
+  filter(round > 0, time_pressure == "Minus") %>%
+  group_by(round) %>%
+  summarize(coop_rate = mean1(behavior_coop)) %>%
+  ungroup() %>%
+  mutate(first_10_rds = ifelse(round <= 10, "Yes", "No")) %>%
+  group_by(first_10_rds) %>%
+  summarize(mean_coop_rate = round(mean(coop_rate),3)) %>%
+  kbl() %>%
+  kable_styling()
+```
+
+The mean rate of cooperation in rounds 1-10 is 38%, dropping to 32.2% in rounds 11-15.
+
+```{r}
+harmdata %>%
+  filter(round > 0, time_pressure == "Plus") %>%
+  group_by(round) %>%
+  summarize(coop_rate = mean1(behavior_coop)) %>%
+  round(3) %>%
+  kbl() %>%
+  kable_styling() 
+```
+
+```{r}
+harmdata %>%
+  filter(round > 0, time_pressure == "Plus") %>%
+  group_by(round) %>%
+  summarize(coop_rate = mean1(behavior_coop)) %>%
+  ungroup() %>%
+  mutate(first_10_rds = ifelse(round <= 10, "Yes", "No")) %>%
+  group_by(first_10_rds) %>%
+  summarize(mean_coop_rate = round(mean(coop_rate), 3)) %>%
+  kbl() %>%
+  kable_styling()
+```
+
+We see the same decay in the TP+ games, however both rounds 1-10 and 11-15 have higher rates.
+
+## Question 5: What sample size would we need a set effect size in harming rate?
+
+To answer this, we can use the `simr` package (Green and MacLeod 2015, https://besjournals.onlinelibrary.wiley.com/doi/full/10.1111/2041-210X.12504). I also reference this excellent presentation: https://med.und.edu/research/daccota/\_files/pdfs/berdc_resource_pdfs/sample_size_r\_module_glmm2.pdf
+
+First, we create a simple model for the effect we want to detect - we are interested in the effect size of `time_pressure` as a fixed effect, with `game` and `superid` as random effects.
+
+```{r}
+# Null model
+m0 = glmer(behavior_punish ~ (1|game) + (1|superid), data = harmdata, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+m1 = glmer(behavior_punish ~ factor(round) + (1|game) + (1|superid), data = harmdata, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+# TP as the only fixed effect
+m2 = glmer(behavior_punish ~ time_pressure + factor(round) + (1|game) + (1|superid), data = harmdata, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+```
+
+```{r}
+# Check anova - 
+anova(m0, m1, m2)
+```
+
+Then we test the power of our model for a certain Wald coefficient. With our current sample size, we have 90% power only once the Wald coefficient is set to -2 (i.e. a \~87% reduction in odds) - so definitely far from what we have (or could feasibly have).
+
+```{r}
+fixef(m2)["time_pressurePlus"] = -2
+powerSim(m2, fixed("time_pressure", method = "lr"), nsim = 10)
+```
+
+I now set the fixed effect regression coefficient for TP to -0.675 (representing a 50% reduction in odds of harming) - greater than our current effect size but an unrealistic increase. Since we can increase the number of players, I adjusted the number of unique superids to 1000 and 10000. For time-saving purposes, I restrict the number of simulations to 50 for the `n=1000` model and 20 for the `n=10000` model.
+
+```{r}
+# current effect size is -0.365: ~30% reduction in harming odds
+fixef(m1)["time_pressurePlus"] = -0.675
+# Set the number of unique players to 500
+m2 = extend(m1, along = "superid", n = 1000) 
+powerSim(m2, fixed("time_pressure", method = "lr"), nsim = 50)
+```
+
+```{r}
+m3 = extend(m1, along = "superid", n = 10000)
+
+powerSim(m3, fixed("time_pressure", method = "lr"), nsim = 20)
+```
+
+Based on the above simulations, I think it is unlikely that we would be able to get enough subjects to detect such a "small" effect. However, there is a limitation where the way the simulation is increasing sample size is to create a unique row for each new user, rather than 15 rows.
