@@ -17,6 +17,10 @@ library(lmerTest)
 library(simr)
 library(kableExtra)
 
+exp4data %>%
+  select(gameID, time_pressure) %>%
+  unique()
+
 mean1 = function(x) {mean(x,na.rm=TRUE)}
 median1 = function(x) {median(x, na.rm = TRUE)}
 sd1 = function(x) {sd(x, na.rm = TRUE)}
@@ -29,19 +33,70 @@ harmdata = mdata3 %>% as_tibble() %>%
          time_pressure = ifelse(str_detect(gameID, "TP") == T, "Plus", "Minus"))
 
 harmdata$timeUp = unlist(harmdata$timeUp.x)
+
+exp4data = harmdata
+
+exp4data
+
+ipList = unique(unlist(exp4data$ipAddress)) # Have these
+library(rgeolocate)
+file <- system.file("extdata","GeoLite2-Country.mmdb", package = "rgeolocate")
+ipCountries = maxmind(ipList, file, "country_name")
+
+prop.table(table(ipCountries)) # Ok, we have some variety. Let's keep
+
+exp4data %>%
+  group_by(game) %>%
+  select(superid) %>%
+  unique() %>%
+  summarize(n = n()) %>%
+  summarize(mean_players = mean(n),
+            min_players = min(n),
+            max_players = max(n))
+
+exp4data %>%
+  group_by(behavior) %>%
+  summarize(n = n()) %>%
+  filter(behavior %in% c("C", "D", "P")) %>%
+  mutate(perc = n/sum(n))
+
+exp4data %>%
+  filter(time_pressure == "Minus") %>%
+  group_by(behavior) %>%
+  summarize(n = n()) %>%
+  filter(behavior %in% c("C", "D", "P")) %>%
+  mutate(perc = n/sum(n))
+
+exp4data %>%
+  filter(time_pressure == "Plus") %>%
+  group_by(behavior) %>%
+  summarize(n = n()) %>%
+  filter(behavior %in% c("C", "D", "P")) %>%
+  mutate(perc = n/sum(n))
 ```
 
 ## Question 1: Is harming slower in the TP- condition?
 
 ```{r}
-harmdata %>%
+exp4data %>%
   filter(time_pressure == "Minus", round > 0, is.na(behavior) == FALSE) %>%
   group_by(behavior) %>%
   summarize(mean_dt = mean1(behaviorTime/1000),
             se_mean_dt = se_mean(behaviorTime/1000),
-            median_dt = median1(behaviorTime/1000)) %>%
-  kbl() %>%
-  kable_styling()
+            median_dt = median1(behaviorTime/1000)) 
+
+exp4data %>%
+  filter(time_pressure == "Plus", round > 0, is.na(behavior) == FALSE) %>%
+  group_by(behavior) %>%
+  summarize(mean_dt = mean1(behaviorTime/1000),
+            se_mean_dt = se_mean(behaviorTime/1000),
+            median_dt = median1(behaviorTime/1000)) 
+
+exp4data %>%
+  group_by(country_3cat) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(perc = n/sum(n))
 ```
 
 Just looking at means, the decision time for harming is definitely slower (3.96s average vs 3.25 for C for 2.96 for D). We can do a quick t-test to verify:
@@ -193,6 +248,11 @@ m1 = glmer(behavior_punish ~ factor(round) + (1|game) + (1|superid), data = harm
 
 # TP as the only fixed effect
 m2 = glmer(behavior_punish ~ time_pressure + factor(round) + (1|game) + (1|superid), data = harmdata, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+m3 = glmer(behavior_punish ~ time_pressure + (1|game) + (1|superid), data = harmdata, family = poisson, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+library(broom.mixed)
+tidy(m3, exponentiate = TRUE)
 ```
 
 ```{r}

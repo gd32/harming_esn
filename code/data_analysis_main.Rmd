@@ -58,6 +58,9 @@ dim(data1_pc)[1] #10727 recorded actions
 ```{r}
 # Number of players
 length(unique(data1_pc$superid)) #745 unique participants 
+length(unique(exp2data$superid))
+length(unique(exp3data_pc$superid))
+length(unique(exp4data$superid))
 ```
 
 ```{r}
@@ -83,7 +86,11 @@ data1_pc %>%
   summarize(n = n()) %>%
   mutate(perc = round(n/10727, 4))
 
-
+data1_pc %>%
+  group_by(country_3cat) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(perc = n/sum(n))
 ```
 
 ```{r}
@@ -457,6 +464,7 @@ exp2data %>%
 ```{r}
 # Count - by arm
 # Exclude round 0 data
+tpdata_pc = exp2data
 tpdata_pc = tpdata_pc %>% filter(round > 0) 
 
 # Build the 3 (-) categories
@@ -491,6 +499,78 @@ exp2data %>%
   filter(behavior %in% c("C", "D", "P")) %>%
   ungroup() %>%
   mutate(prop = n/sum(n))
+
+exp2data %>%
+  filter(game %in% 1:20, round > 0) %>%
+  group_by(behavior)  %>%
+  filter(behavior %in% c("C", "D", "P")) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(prop = n/sum(n))
+
+exp2data %>%
+  filter(game %in% 1:20, time_pressure == "Minus", round > 0) %>%
+  group_by(behavior)  %>%
+  filter(behavior %in% c("C", "D", "P")) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(prop = n/sum(n))
+
+exp2data %>%
+  filter(game %in% 1:20, time_pressure == "Plus", round > 0) %>%
+  group_by(behavior)  %>%
+  filter(behavior %in% c("C", "D", "P")) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(prop = n/sum(n))
+
+exp2data %>%
+  filter(game %in% 1:20, round > 0) %>%
+  select(superid) %>%
+  unique() %>%
+  count()
+
+exp2data %>%
+  filter(game %in% 1:20, round > 0) %>%
+  group_by(game) %>%
+  select(superid) %>%
+  unique() %>%
+  summarize(n = n()) %>%
+  summarize(mean_players = mean(n),
+            min_players = min(n),
+            max_players = max(n))
+
+exp2data %>%
+  filter(game %in% 21:50, round > 0) %>%
+  group_by(game) %>%
+  select(superid) %>%
+  unique() %>%
+  summarize(n = n()) %>%
+  summarize(mean_players = mean(n),
+            min_players = min(n),
+            max_players = max(n))
+
+exp2data %>%
+  filter(game %in% 21:50, round > 0) %>%
+  group_by(behavior)  %>%
+  filter(behavior %in% c("C", "D", "P")) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(prop = n/sum(n))
+
+exp2data %>%
+  filter(game %in% 21:50, time_pressure == "Plus", behavior %in% c("C", "D", "P")) %>%
+  group_by(behavior) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(prop = n/sum(n))
+
+exp2data %>%
+  filter(game %in% 21:50, time_pressure == "Minus", behavior %in% c("C", "D", "P")) %>%
+  group_by(behavior) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(prop = n/sum(n))
 ```
 
 ```{r}
@@ -499,6 +579,37 @@ exp2data %>%
   filter(round >0) %>%
   group_by(behavior, time_pressure) %>%
   summarize(mean_dt = mean1(behaviorTime/1000))
+
+exp2data %>%
+  filter(round >0, behavior %in% c("C", "D", "P"), game %in% 1:20) %>%
+  group_by(behavior, time_pressure) %>%
+  summarize(mean_dt = mean1(behaviorTime/1000))
+
+exp2data %>%
+  filter(round >0, behavior %in% c("C", "D", "P"), game %in% 21:50) %>%
+  group_by(behavior, time_pressure) %>%
+  summarize(mean_dt = mean1(behaviorTime/1000))
+
+
+exp2data %>%
+  group_by(country_3cat) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(perc = n/sum(n))
+
+exp2data %>%
+  filter(game %in% 1:20)%>%
+  group_by(country_3cat) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(perc = n/sum(n))
+
+exp2data %>%
+  filter(game %in% 21:50)%>%
+  group_by(country_3cat) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(perc = n/sum(n))
 ```
 
 ```{r}
@@ -859,6 +970,12 @@ xtabs(~behavior_punish_lag + social_env_lag + time_pressure, tpdata_pc_modified)
 exp3data_pc %>%
   group_by(game) %>%
   count() # 20 games
+
+exp3data_pc %>%
+  group_by(country_3cat) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(perc = n/sum(n))
 ```
 
 ```{r}
@@ -871,6 +988,9 @@ exp3data_pc %>%
   summarize(mean_players = mean(n),
             min_players = min(n),
             max_players = max(n))
+
+exp3data_pc = exp3data_pc %>%
+  rename(time_pressure = time_pressure.x)
 
 exp3data_pc %>%
   group_by(time_pressure) %>%
