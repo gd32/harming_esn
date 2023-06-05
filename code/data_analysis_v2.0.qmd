@@ -1,0 +1,214 @@
+---
+title: "Data Analysis for Harming and Time Pressure"
+author: "George Dewey, Hiroyasu Ando, Ryo Ikesu, Akihiro Nishi, TBD"
+format: 
+  pdf:
+    toc: true
+editor: visual
+---
+
+# Introduction
+
+## Load required packages
+
+```{r, message = F, warning = F}
+library(tidyverse)
+library(igraph)
+library(lme4)
+library(lmerTest)
+library(data.table)
+library(broom.mixed)
+library(patchwork)
+library(stringr)
+```
+
+## Load required data
+
+```{r}
+## Original harming experiment - Experiment A
+load("~/Documents/Projects/harming_esn/data/exp1/data1_pc_v2.Rdata")
+
+## TP harming experiment - Experiment B
+load("~/Documents/Projects/harming_esn/data/exp4/exp4data.Rdata")
+```
+
+## Create helper functions
+
+```{r}
+mean1 = function(x) {mean(x,na.rm=TRUE)}
+median1 = function(x) {median(x, na.rm = TRUE)}
+sd1 = function(x) {sd(x, na.rm = TRUE)}
+se_mean = function(x) sd1(x)/sqrt(sum(is.na(x) == 0))
+```
+
+# Analysis
+
+## Descriptive Analysis
+
+### Per-game characteristics
+
+```{r, message = F}
+# Players per game, min, max - Experiment A
+data1_pc %>%
+  group_by(game) %>%
+  select(superid) %>%
+  unique() %>%
+  summarize(n = n()) %>%
+  summarize(`Mean Players` = mean(n),
+            `Min Players` = min(n),
+            `Max Players` = max(n))
+```
+```{r, message = F}
+# Players per game, min, max - Experiment B
+exp4data %>%
+  group_by(game) %>%
+  select(superid) %>%
+  unique() %>%
+  summarize(n = n()) %>%
+  summarize(`Mean Players` = mean(n),
+            `Min Players` = min(n),
+            `Max Players` = max(n))
+```
+
+### Behavior breakdown
+
+```{r}
+# Behavior breakdown - Experiment A
+data1_pc %>%
+  mutate(behavior = case_when(behavior_coop == 1 ~ "C",
+                              behavior_defect == 1 ~ "D",
+                              behavior_punish == 1 ~ "P")) %>%
+  group_by(behavior) %>%
+  filter(behavior %in% c("C", "D", "P")) %>%
+  summarize(count = n()) %>%
+  ungroup() %>%
+  mutate(proportion = count/sum(count))
+```
+
+```{r}
+# Country breakdown - Experiment A
+data1_pc %>%
+  group_by(country_3cat) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(proportion = n/sum(n))
+```
+
+```{r}
+# Behavior breakdown - Experiment B, TP-
+exp4data %>%
+  group_by(behavior) %>%
+  filter(time_pressure == "Minus", behavior %in% c("C", "D", "P")) %>%
+  summarize(count = n()) %>%
+  ungroup() %>%
+  mutate(proportion = count/sum(count))
+```
+```{r}
+# Behavior breakdown - Experiment B, TP+
+
+exp4data %>%
+  group_by(behavior) %>%
+  filter(time_pressure == "Plus", behavior %in% c("C", "D", "P")) %>%
+  summarize(count = n()) %>%
+  ungroup() %>%
+  mutate(proportion = count/sum(count))
+```
+
+```{r}
+# Country breakdown - Experiment A
+data1_pc %>%
+  group_by(country_3cat) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(proportion = n/sum(n))
+```
+
+```{r}
+# Country breakdown - Experiment B
+exp4data %>%
+  group_by(country_3cat) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(proportion = n/sum(n))
+```
+
+### Network characteristics
+
+```{r}
+# Network statistics
+mean1(data1_pc$degree)
+
+mean1(exp4data$degree)
+```
+
+## Behavior time
+
+```{r}
+# Times per behavior
+data1_pc %>%
+  mutate(behavior = case_when(behavior_coop == 1 ~ "C",
+                              behavior_defect == 1 ~ "D",
+                              behavior_punish == 1 ~ "P")) %>%
+  group_by(behavior) %>%
+  filter(behavior %in% c("C", "D", "P")) %>%
+  summarize(mean_dt = mean1(behaviorTime/1000),
+            se_mean_dt = se_mean(behaviorTime/1000))
+```
+
+```{r}
+## Behavior times, TP-
+exp4data %>%
+  group_by(behavior) %>%
+  filter(time_pressure == "Minus", behavior %in% c("C", "D", "P")) %>%
+  summarize(mean_dt = mean1(behaviorTime/1000),
+            se_mean_dt = se_mean(behaviorTime/1000))
+```
+
+```{r}
+## Behavior times, TP+
+exp4data %>%
+  group_by(behavior) %>%
+  filter(time_pressure == "Plus", behavior %in% c("C", "D", "P")) %>%
+  summarize(mean_dt = mean1(behaviorTime/1000),
+            se_mean_dt = se_mean(behaviorTime/1000))
+```
+
+# Regression modeling
+
+```{r}
+m1.1 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag+ factor(round) + (1|game) + (1|superid), data = data1_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+se = sqrt(diag(vcov(m1.1)))
+# table of estimates with 95% CI
+tab_m1.1 = cbind(Est = fixef(m1.1), LL = fixef(m1.1) - 1.96 * se, UL = fixef(m1.1) + 1.96 * se)
+round(exp(tab_m1.1), digits = 3)[1:11,]
+```
+```{r}
+names(exp4data)
+
+exp4data_test1 = exp4data %>%
+  filter(round > 0)
+
+exp4data_test = exp4data %>% filter(round != 0)
+
+m2.9 = glmer(behavior_punish ~ time_pressure +  behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + factor(round) + (1|game) + (1|superid),  data = exp4data_test1, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+tidy(m2.9, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(8) 
+```
+
+```{r}
+m3 = glmer(behavior_punish ~ time_pressure + factor(round) + (1|game) + (1|superid),  data = exp4data_test1, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+tidy(m3, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(8) 
+```

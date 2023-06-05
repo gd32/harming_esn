@@ -1,8 +1,7 @@
 rm(list = ls())
-setwd("~/Documents/Projects/harming_esn/Data/exp4/")
-
-load(file="node_exp4.Rdata") #ndata
-load(file="link_exp4.Rdata") #ldata
+setwd("~/Documents/Projects/harming_esn/question_time_v1.1/happiness")
+load(file="node_happiness.Rdata") #ndata
+load(file="link_happiness.Rdata") #ldata
 
 library(reldist)
 library(tidyverse)
@@ -61,12 +60,14 @@ for (i in 1:(dim(ldata4)[1]-1)) {
   }
   print(i)
 }
-save(ldata4,file="ldata_exp4.Rdata")
 
-###############################################################################
-# Start here for creating new variables
-load("~/Documents/Projects/harming_esn/Data/exp4/ldata_exp4.Rdata") #ldata
-load("~/Documents/Projects/harming_esn/Data/exp4/node_exp4.Rdata") #ndata
+# save(ldata4,file="ldata4_0316X.Rdata")
+
+# # Start here for creating new variables
+# load("~/Documents/Projects/harming_esn/Data/harming_jsons/ldata4_0316X.Rdata") #ldata
+# load("~/Documents/Projects/harming_esn/Data/harming_jsons/node_1aX.Rdata") #ndata
+
+### adjust ndata ####
 
 # Adjust behavior
 ndata = ndata %>% mutate(behavior = ifelse(ndata$behavior == "", NA, ndata$behavior))
@@ -76,11 +77,16 @@ ndata$behavior_coop = ifelse(is.na(ndata$behavior)==0 & ndata$behavior == "C", 1
 ndata$behavior_defect = ifelse(is.na(ndata$behavior)==0 & ndata$behavior == "D", 1, 0)
 ndata$behavior_punish = ifelse(is.na(ndata$behavior)==0 & ndata$behavior == "P", 1, 0)
 
-#behaviorTime as numeric
+# Check tables for behavior
+xtabs(~behavior+behavior_coop, ndata)
+xtabs(~behavior+behavior_defect, ndata)
+xtabs(~behavior+behavior_punish, ndata)
+
+#behaviorTIme as numeric
 ndata$behaviorTime = as.numeric(ndata$behaviorTime)
 
 # What scale is satisfaction on ?
-table(unlist(ndata$rewiringSatisfaction)) # just a likert scale? 1 - very bad -> 5 very good
+table(unlist(ndata$satisfaction)) # just a likert scale? 1 - very bad -> 5 very good
 
 # Other demographics? can get is_hispanic, race, ipAddress
 table(unlist(ndata$is_hispanic)) # All missing - or could be no hispanic? Regardless, don't use
@@ -99,21 +105,52 @@ rownames(ldata6) = NULL
 #n of ties to calculate network density (degree)
 ldata6$n_ties = as.numeric(apply(ldata6[,c("id2.1","id2.2","id2.3","id2.4",
                                            "id2.5","id2.6","id2.7","id2.8","id2.9",
-                                           "id2.10","id2.11","id2.12","id2.13","id2.14", "id2.15", "id2.16")],1,length1))
+                                           "id2.10","id2.11","id2.12","id2.13","id2.14")],1,length1))
 
 ndata1 = merge(x=ndata,y=ldata6,all.x=TRUE,all.y=FALSE,
                by.x=c("round","gameID","game","scoreA","scoreB","percentA","showScore","id"),
                by.y=c("round","gameID","game","scoreA","scoreB","percentA","showScore","id1"))
 
-save(ndata1, file = "ndata1_exp4.Rdata") #This is used for the individual-level analysis. 
-load("~/Documents/Projects/harming_esn/data/exp4/ndata1_exp4.Rdata") #ndata1 
+# save(ndata1,file="~/Documents/Projects/harming_esn/Data/ndata_individual.Rdata") #This is used for the individual-level analysis. 
+# load("~/Documents/Projects/harming_esn/Data/ndata_individual.Rdata") #ndata1 
 
-dim(ndata1[ndata1$round==0,]) # 739 individuals
-dim(ndata1[ndata1$round!=0,]) # 10747 actions
+# merge(ndata, ldata6, all.x = T, all.y = F,
+#       by.x=c("round","gameID","game","scoreA","scoreB","percentA","showScore","id"),
+#       by.y=c("round","gameID","game","scoreA","scoreB","percentA","showScore","id1"))
 
-ndata1$superid = 100*ndata1$game+as.numeric(substr(ndata1$id,2,nchar(ndata1$id))) #the last two digits are the id in the game. 
+
+# dim(ndata1[ndata1$round==0,]) # 745 individuals
+# dim(ndata1) # 10727 individual rounds
+# 
+# ndata1$superid = 100*ndata1$game+as.numeric(substr(ndata1$id,2,nchar(ndata1$id))) #the last two digits are the id in the game. 
+
+ndata_times = ndata1 %>% as_tibble() %>%
+  filter(round == 15) %>%
+  select(game, id, finalscore_time, q1_time, q2_time, q3_time, q4_time, gender_time, age_time) %>%
+  unnest(cols = c(finalscore_time, q1_time, q2_time, q3_time, q4_time, gender_time, age_time))
+
+ndata_times$game = 100 + ndata_times$game
+ndata_times$pid = ndata_times$id
+ndata_times$id = as.numeric(gsub('p', '', ndata_times$id))
+ndata_times$superid = ndata_times$game*100 + ndata_times$id
+
+happ_times = ndata_times %>%
+  select(superid, ends_with("time")) %>%
+  rename(start_time = finalscore_time)
+happ_times
+write_csv(happ_times, file = "~/Library/CloudStorage/Dropbox/2023S/PANAS/time_data/happ_times.csv")
+
+happ_data$game = 100 + happ_data$game
+happ_data$pid = happ_data$id
+happ_data$id = as.numeric(gsub('p', '', happ_data$id))
+happ_data$superid = happ_data$game*100 + happ_data$id
+
+load("~/Documents/Projects/panas_validation/original_data/happ_data2.RDS")
+happ_data2
+
 ndata1[ndata1$round==0,"cumulativePayoff"] = ndata1[ndata1$round==0,"initScore"]
-ndata2 = ndata1[,c("scoreA","scoreB","percentA","satisfaction","showScore","game","round","initScore","behavior_coop","behavior_defect", "behavior_punish","behaviorTime","payoff","cumulativePayoff","n_ties","ipAddress","timeUp","id","superid")] #Variable pruning
+ndata2 = ndata1[,c("scoreA","scoreB","percentA","satisfaction","showScore","game","round","initScore","behavior_coop", "behavior_defect", "behavior_punish","behaviorTime","payoff","cumulativePayoff","n_ties","ipAddress","id","superid")] #Variable pruning
+
 ndata3 = reshape(ndata2, direction = "wide", idvar=c("scoreA","scoreB","percentA","showScore","game","round"), timevar="id") 
 
 standardize <- function(x) {
@@ -151,6 +188,7 @@ ndata1$superid2.13 = ifelse(is.na(ndata1$id2.13)==1,NA,100*ndata1$game+as.numeri
 ndata1$superid2.14 = ifelse(is.na(ndata1$id2.14)==1,NA,100*ndata1$game+as.numeric(substr(ndata1$id2.14,2,nchar(as.character(ndata1$id2.14)))))
 ndata1$superid2.15 = ifelse(is.na(ndata1$id2.15)==1,NA,100*ndata1$game+as.numeric(substr(ndata1$id2.15,2,nchar(as.character(ndata1$id2.15)))))
 ndata1$superid2.16 = ifelse(is.na(ndata1$id2.16)==1,NA,100*ndata1$game+as.numeric(substr(ndata1$id2.16,2,nchar(as.character(ndata1$id2.16)))))
+ndata1$superid2.17 = ifelse(is.na(ndata1$id2.17)==1,NA,100*ndata1$game+as.numeric(substr(ndata1$id2.17,2,nchar(as.character(ndata1$id2.17)))))
 
 #Proc A: Preparing for the outcome data of each round
 #Including: game info, ego ID, and ego's cooperative behavior
@@ -159,8 +197,7 @@ ndata1$superid2.16 = ifelse(is.na(ndata1$id2.16)==1,NA,100*ndata1$game+as.numeri
 outcome_data = ndata1[ndata1$round %in% c(0:15),c("gameID","game","scoreA","scoreB","percentA",
                                                   "satisfaction","behaviorTime","showScore","round",
                                                   "superid","payoff","cumulativePayoff","behavior_coop",
-                                                  "behavior_defect", "behavior_punish","n_ties","timeUp",
-                                                  "satisfaction","cPayoffS")]
+                                                  "behavior_defect", "behavior_punish","n_ties", "satisfaction", "cPayoffS")]
 outcome_data$previousround = outcome_data$round - 1
 
 
@@ -170,13 +207,13 @@ outcome_data$previousround = outcome_data$round - 1
 
 network_data = ndata1[,c("gameID","game","round","superid","behavior_coop",
                          "behavior_defect", "behavior_punish","payoff","cumulativePayoff", 
-                         "satisfaction","cPayoffS","behaviorTime","age", 
-                         "gender", "ipAddress","timeUp",
+                         "satisfaction","cPayoffS","behaviorTime", "age", 
+                         "gender", "ipAddress",
                          "superid2.1","superid2.2","superid2.3","superid2.4",
                          "superid2.5","superid2.6","superid2.7","superid2.8",
                          "superid2.9","superid2.10","superid2.11","superid2.12",
-                         "superid2.13","superid2.14","superid2.15","superid2.16"
-                         )]
+                         "superid2.13","superid2.14","superid2.15","superid2.16",
+                         "superid2.17")]
 
 network_data = network_data %>% rename(previousround = round,
                         e_behavior_coop = behavior_coop,
@@ -191,7 +228,7 @@ network_data = network_data %>% rename(previousround = round,
 
 
 #Proc C: Preparing for the alter's attribute data for previous round
-alter_data = ndata1[,c("gameID","game","round","superid","behavior_coop","behavior_defect", 
+alter_data = ndata1[,c("gameID","game","round","superid","behavior_coop", "behavior_defect", 
                        "behavior_punish","payoff","cumulativePayoff" ,"satisfaction","cPayoffS")]
 names(alter_data) = c("gameID","game","previousround","a_superid","a_behavior_coop", "a_behavior_defect", 
                       "a_behavior_punish","a_payoff","a_cumulativePayoff","a_satisfaction","a_cPayoffS")
@@ -219,6 +256,7 @@ names(a13_data) = c("gameID","game","previousround","a13_superid","a13_behavior_
 names(a14_data) = c("gameID","game","previousround","a14_superid","a14_behavior_coop", "a14_behavior_defect", "a14_behavior_punish","a14_payoff","a14_cumulativePayoff", "a14_satisfaction","a14_cPayoffS")
 names(a15_data) = c("gameID","game","previousround","a15_superid","a15_behavior_coop", "a15_behavior_defect", "a15_behavior_punish","a15_payoff","a15_cumulativePayoff", "a15_satisfaction","a15_cPayoffS")
 names(a16_data) = c("gameID","game","previousround","a16_superid","a16_behavior_coop", "a16_behavior_defect", "a16_behavior_punish","a16_payoff","a16_cumulativePayoff", "a16_satisfaction","a16_cPayoffS")
+names(a17_data) = c("gameID","game","previousround","a17_superid","a17_behavior_coop", "a17_behavior_defect", "a17_behavior_punish","a17_payoff","a17_cumulativePayoff", "a17_satisfaction","a17_cPayoffS")
 
 # rename names to right order
 c1_data = c2_data = c3_data = c4_data = c5_data = c6_data = c7_data = c8_data = c9_data = c10_data = c11_data = c12_data = c13_data = c14_data = c15_data = c16_data = c17_data = c18_data = c19_data = c20_data = alter_data2
@@ -238,6 +276,7 @@ names(c13_data) = c("gameID","game","currentround","c13_superid","c13_behavior_c
 names(c14_data) = c("gameID","game","currentround","c14_superid","c14_behavior_coop", "c14_behavior_defect", "c14_behavior_punish","c14_payoff","c14_cumulativePayoff", "c14_satisfaction", "c14_cPayoffS")
 names(c15_data) = c("gameID","game","currentround","c15_superid","c15_behavior_coop", "c15_behavior_defect", "c15_behavior_punish","c15_payoff","c15_cumulativePayoff", "c15_satisfaction", "c15_cPayoffS")
 names(c16_data) = c("gameID","game","currentround","c16_superid","c16_behavior_coop", "c16_behavior_defect", "c16_behavior_punish","c16_payoff","c16_cumulativePayoff", "c16_satisfaction", "c16_cPayoffS")
+names(c17_data) = c("gameID","game","currentround","c17_superid","c17_behavior_coop", "c17_behavior_defect", "c17_behavior_punish","c17_payoff","c17_cumulativePayoff", "c17_satisfaction", "c17_cPayoffS")
 
 #Proc D: Merge the data
 outcome_network = merge(outcome_data, network_data, all.x = T, by = c("gameID", "game", "superid", "previousround"))
@@ -258,12 +297,17 @@ outcome_network_a13 = merge(x=outcome_network_a12,y=a13_data,all.x=TRUE,all.y=FA
 outcome_network_a14 = merge(x=outcome_network_a13,y=a14_data,all.x=TRUE,all.y=FALSE,by.x=c("gameID","game","previousround","superid2.14"),by.y=c("gameID","game","previousround","a14_superid"))
 outcome_network_a15 = merge(x=outcome_network_a14,y=a15_data,all.x=TRUE,all.y=FALSE,by.x=c("gameID","game","previousround","superid2.15"),by.y=c("gameID","game","previousround","a15_superid"))
 outcome_network_a16 = merge(x=outcome_network_a15,y=a16_data,all.x=TRUE,all.y=FALSE,by.x=c("gameID","game","previousround","superid2.16"),by.y=c("gameID","game","previousround","a16_superid"))
+outcome_network_a17 = merge(x=outcome_network_a16,y=a17_data,all.x=TRUE,all.y=FALSE,by.x=c("gameID","game","previousround","superid2.17"),by.y=c("gameID","game","previousround","a17_superid"))
+# outcome_network_a18 = merge(x=outcome_network_a17,y=a18_data,all.x=TRUE,all.y=FALSE,by.x=c("gameID","game","previousround","superid2.18"),by.y=c("gameID","game","previousround","a18_superid"))
+# outcome_network_a19 = merge(x=outcome_network_a18,y=a19_data,all.x=TRUE,all.y=FALSE,by.x=c("gameID","game","previousround","superid2.19"),by.y=c("gameID","game","previousround","a19_superid"))
+# mdata1 = merge(x=outcome_network_a19,y=a20_data,all.x=TRUE,all.y=FALSE,by.x=c("gameID","game","previousround","superid2.20"),by.y=c("gameID","game","previousround","a20_superid"))
 
-mdata1 = outcome_network_a16
+
+mdata1 = outcome_network_a17
 mdata1 = as.matrix(mdata1)
 # write.csv(mdata1, "mdata1_0316X.csv", quote=FALSE, row.names=FALSE) 
 
-outcome_network_c1 = merge(x=outcome_network_a16,y=c1_data,all.x=TRUE,all.y=FALSE,by.x=c("gameID","game","round","superid2.1"),by.y=c("gameID","game","currentround","c1_superid"))
+outcome_network_c1 = merge(x=outcome_network_a17,y=c1_data,all.x=TRUE,all.y=FALSE,by.x=c("gameID","game","round","superid2.1"),by.y=c("gameID","game","currentround","c1_superid"))
 outcome_network_c2 = merge(x=outcome_network_c1,y=c2_data,all.x=TRUE,all.y=FALSE,by.x=c("gameID","game","round","superid2.2"),by.y=c("gameID","game","currentround","c2_superid"))
 outcome_network_c3 = merge(x=outcome_network_c2,y=c3_data,all.x=TRUE,all.y=FALSE,by.x=c("gameID","game","round","superid2.3"),by.y=c("gameID","game","currentround","c3_superid"))
 outcome_network_c4 = merge(x=outcome_network_c3,y=c4_data,all.x=TRUE,all.y=FALSE,by.x=c("gameID","game","round","superid2.4"),by.y=c("gameID","game","currentround","c4_superid"))
@@ -279,14 +323,15 @@ outcome_network_c13 = merge(x=outcome_network_c12,y=c13_data,all.x=TRUE,all.y=FA
 outcome_network_c14 = merge(x=outcome_network_c13,y=c14_data,all.x=TRUE,all.y=FALSE,by.x=c("gameID","game","round","superid2.14"),by.y=c("gameID","game","currentround","c14_superid"))
 outcome_network_c15 = merge(x=outcome_network_c14,y=c15_data,all.x=TRUE,all.y=FALSE,by.x=c("gameID","game","round","superid2.15"),by.y=c("gameID","game","currentround","c15_superid"))
 outcome_network_c16 = merge(x=outcome_network_c15,y=c16_data,all.x=TRUE,all.y=FALSE,by.x=c("gameID","game","round","superid2.16"),by.y=c("gameID","game","currentround","c16_superid"))
+outcome_network_c17 = merge(x=outcome_network_c16,y=c17_data,all.x=TRUE,all.y=FALSE,by.x=c("gameID","game","round","superid2.17"),by.y=c("gameID","game","currentround","c17_superid"))
 
-mdata1 = outcome_network_c16
+mdata1 = outcome_network_c17
 
 mdata1$e_degree = as.numeric(apply(mdata1[,c("superid2.1","superid2.2","superid2.3","superid2.4",
                                              "superid2.5","superid2.6","superid2.7","superid2.8",
                                              "superid2.9","superid2.10","superid2.11","superid2.12",
-                                             "superid2.13","superid2.14", "superid2.15", "superid2.16"
-                                             )],1,length1))
+                                             "superid2.13","superid2.14", "superid2.15", "superid2.16",
+                                             "superid2.17")],1,length1))
 
 #rate of richer neighbors
 mdata1$richer_a1 = as.numeric(mdata1$a1_cumulativePayoff > mdata1$e_cumulativePayoff) 
@@ -305,6 +350,8 @@ mdata1$richer_a13 = as.numeric(mdata1$a13_cumulativePayoff > mdata1$e_cumulative
 mdata1$richer_a14 = as.numeric(mdata1$a14_cumulativePayoff > mdata1$e_cumulativePayoff) 
 mdata1$richer_a15 = as.numeric(mdata1$a15_cumulativePayoff > mdata1$e_cumulativePayoff) 
 mdata1$richer_a16 = as.numeric(mdata1$a16_cumulativePayoff > mdata1$e_cumulativePayoff) 
+mdata1$richer_a17 = as.numeric(mdata1$a17_cumulativePayoff > mdata1$e_cumulativePayoff) 
+
 
 mdata1$rate_rich = as.numeric(apply(mdata1[,c("richer_a1","richer_a2","richer_a3","richer_a4","richer_a5","richer_a6","richer_a7","richer_a8","richer_a9","richer_a10","richer_a11","richer_a12","richer_a13","richer_a14")],1,mean1))
 mdata1$local_gini = as.numeric(apply(mdata1[,c("e_cumulativePayoff","a1_cumulativePayoff","a2_cumulativePayoff","a3_cumulativePayoff","a4_cumulativePayoff","a5_cumulativePayoff","a6_cumulativePayoff","a7_cumulativePayoff","a8_cumulativePayoff","a9_cumulativePayoff","a10_cumulativePayoff","a11_cumulativePayoff","a12_cumulativePayoff","a13_cumulativePayoff","a14_cumulativePayoff")],1,gini1))
@@ -319,50 +366,254 @@ mdata1$rel_rank = (mdata1$rank-1)/(mdata1$e_degree) #changed the definition.
 # rate comparisons for the different behaviors
 mdata1$prev_local_rate_coop = as.numeric(apply(mdata1[,c("a1_behavior_coop","a2_behavior_coop","a3_behavior_coop","a4_behavior_coop","a5_behavior_coop",
                                                          "a6_behavior_coop","a7_behavior_coop","a8_behavior_coop","a9_behavior_coop","a10_behavior_coop",
-                                                         "a11_behavior_coop","a12_behavior_coop","a13_behavior_coop","a14_behavior_coop","a15_behavior_coop",
-                                                         "a16_behavior_coop")],1,mean1))
+                                                         "a11_behavior_coop","a12_behavior_coop","a13_behavior_coop","a14_behavior_coop")],1,mean1))
 mdata1$cur_local_rate_coop = as.numeric(apply(mdata1[,c("c1_behavior_coop","c2_behavior_coop","c3_behavior_coop","c4_behavior_coop","c5_behavior_coop"
                                                         ,"c6_behavior_coop","c7_behavior_coop","c8_behavior_coop","c9_behavior_coop","c10_behavior_coop",
-                                                        "c11_behavior_coop","c12_behavior_coop","c13_behavior_coop","c14_behavior_coop","c15_behavior_coop",
-                                                        "c16_behavior_coop")],1,mean1))
+                                                        "c11_behavior_coop","c12_behavior_coop","c13_behavior_coop","c14_behavior_coop")],1,mean1))
 mdata1$prev_local_rate_defect = as.numeric(apply(mdata1[,c("a1_behavior_defect","a2_behavior_defect","a3_behavior_defect","a4_behavior_defect","a5_behavior_defect",
                                                          "a6_behavior_defect","a7_behavior_defect","a8_behavior_defect","a9_behavior_defect","a10_behavior_defect",
-                                                         "a11_behavior_defect","a12_behavior_defect","a13_behavior_defect","a14_behavior_defect","a15_behavior_defect",
-                                                         "a16_behavior_defect")],1,mean1))
+                                                         "a11_behavior_defect","a12_behavior_defect","a13_behavior_defect","a14_behavior_defect")],1,mean1))
 mdata1$cur_local_rate_defect = as.numeric(apply(mdata1[,c("c1_behavior_defect","c2_behavior_defect","c3_behavior_defect","c4_behavior_defect","c5_behavior_defect"
                                                         ,"c6_behavior_defect","c7_behavior_defect","c8_behavior_defect","c9_behavior_defect","c10_behavior_defect",
-                                                        "c11_behavior_defect","c12_behavior_defect","c13_behavior_defect","c14_behavior_defect","c15_behavior_defect",
-                                                        "c16_behavior_defect")],1,mean1))
+                                                        "c11_behavior_defect","c12_behavior_defect","c13_behavior_defect","c14_behavior_defect")],1,mean1))
 mdata1$prev_local_rate_punish = as.numeric(apply(mdata1[,c("a1_behavior_punish","a2_behavior_punish","a3_behavior_punish","a4_behavior_punish","a5_behavior_punish",
                                                          "a6_behavior_punish","a7_behavior_punish","a8_behavior_punish","a9_behavior_punish","a10_behavior_punish",
-                                                         "a11_behavior_punish","a12_behavior_punish","a13_behavior_punish","a14_behavior_punish","a15_behavior_punish",
-                                                         "a16_behavior_punish")],1,mean1))
+                                                         "a11_behavior_punish","a12_behavior_punish","a13_behavior_punish","a14_behavior_punish")],1,mean1))
 mdata1$cur_local_rate_punish = as.numeric(apply(mdata1[,c("c1_behavior_punish","c2_behavior_punish","c3_behavior_punish","c4_behavior_punish","c5_behavior_punish"
                                                         ,"c6_behavior_punish","c7_behavior_punish","c8_behavior_punish","c9_behavior_punish","c10_behavior_punish",
-                                                        "c11_behavior_punish","c12_behavior_punish","c13_behavior_punish","c14_behavior_punish","c15_behavior_punish",
-                                                        "c16_behavior_punish")],1,mean1))
+                                                        "c11_behavior_punish","c12_behavior_punish","c13_behavior_punish","c14_behavior_punish")],1,mean1))
 
+# Counts for choices in the local network
 names(mdata1)
-
+# Making mdata2
+# mdata2 = mdata1[,c("gameID","game","scoreA","scoreB","percentA","showScore","round","superid","satisfaction","behavior","e_behavior","e_payoff","payoff","cumulativePayoff","e_cumulativePayoff","n_ties","e_degree","rate_coop","rate_rich","local_gini","local_avg_wealth","local_med_wealth","local_rate_coop","rank","rel_rank")]
 mdata2 = mdata1[,c("gameID","game","scoreA","scoreB","percentA","showScore","round","superid",
-                   "satisfaction","behavior_coop", "behavior_defect", "behavior_punish",
-                   "prev_local_rate_coop", "cur_local_rate_coop", "prev_local_rate_defect",
-                   "cur_local_rate_defect", "prev_local_rate_punish", "cur_local_rate_punish",
+                   "satisfaction.1","behavior_coop", "behavior_defect", "behavior_punish",
                    "e_payoff","cPayoffS","behaviorTime", "gender", "age", "ipAddress",
                    "e_behaviorTime", "payoff","cumulativePayoff","e_cumulativePayoff",
-                   "n_ties","e_degree","e_satisfaction","timeUp.x","rate_rich","local_gini",
-                   "local_avg_wealth","local_avg_stdwealth","local_med_wealth", "rank","rel_rank", "rel_wealth")]
+                   "n_ties","e_degree","e_satisfaction","rate_rich","local_gini",
+                   "local_avg_wealth","local_avg_stdwealth","local_med_wealth","prev_local_rate_coop",
+                   "cur_local_rate_coop", "prev_local_rate_defect", "cur_local_rate_defect",
+                   "prev_local_rate_punish", "cur_local_rate_punish", "rank","rel_rank", "rel_wealth")]
+
+mdata1 %>% select(gameID, game, scoreA, scoreB, percentA, showScore, round, superid, satisfaction, behavior_coop, behavior_defect,
+                  behavior_punish, e_payoff, cPayoffS, behaviorTime, gender, age, ipAddress,
+                  e_behaviorTime, payoff, cumulativePayoff, e_cumulativePayoff, 
+                  n_ties, e_degree, e_satisfaction, rate_rich, 
+                  local_gini, local_avg_wealth, local_avg_stdwealth, 
+                  local_med_wealth, prev_local_rate_coop, cur_local_rate_coop,
+                  prev_local_rate_defect, cur_local_rate_defect, prev_local_rate_punish,
+                  prev_local_rate_punish)
 
 colnames(mdata2)[colnames(mdata2) == "n_ties"] = "degree"
-save(mdata1,file="exp4_mdata1.Rdata") #mdata1
-save(mdata2, file = "exp4_mdata2.Rdata")
+save(mdata1,file="~/Documents/Projects/harming_esn/Data/mdata1.Rdata") #mdata1
+save(mdata2,file="~/Documents/Projects/harming_esn/Data/mdata2.Rdata") #mdata2
+
 initial_data = mdata2[mdata2$round==1,c("superid","behavior_coop", "behavior_defect", "behavior_punish","local_gini","local_avg_wealth","degree")]
 names(initial_data)
 colnames(initial_data) = c("superid","initial_coop", "inital_defect", "initial_punish","initial_local_gini","initial_local_avg_wealth","initial_degree")
 initial_data0 = mdata2[mdata2$round==0,c("superid","cumulativePayoff")]
 colnames(initial_data0) = c("superid","initial_score")
 initial_data2 = merge(x=initial_data,y=initial_data0,all.x=TRUE,all.y=TRUE,by="superid")
+write.csv(initial_data2, "~/Documents/Projects/harming_esn/Data/initial_data2.csv",quote=FALSE,row.names=FALSE) 
 mdata3 = merge(x=mdata2,y=initial_data2,all.x=TRUE,all.y=FALSE,by="superid")
+write.csv(as.matrix(mdata3), "~/Documents/Projects/harming_esn/Data/mdata3.csv",quote=FALSE,row.names=FALSE) #For STATA 
 
-save(mdata3, file= "exp4_mdata3.Rdata")
+save(mdata3, file= "~/Documents/Projects/harming_esn/Data/mdata3.Rdata")
 
+
+# relative difference - standardize the cumulative wealth
+# local gini for the past round 
+# calculate 
+#agent based 
+#interaction variables (cooperation and happiness visible condition)
+
+#what determines happiness, cooperation,
+
+df <- mdata3
+df$happ <- ifelse(df$satisfaction == "v_good", 4, 
+                  ifelse(df$satisfaction == "good", 3, 
+                  ifelse(df$satisfaction == "neutral", 2,
+                  ifelse(df$satisfaction == "bad", 1, 
+                  ifelse(df$satisfaction == "v_bad", 0, NA)))))
+
+standardize <- function(x) {
+  mu = mean(x, na.rm = T)
+  sd = sd(x, na.rm = T) 
+  return ((x - mu)/sd)
+}
+
+dfStandard <- as.data.frame(matrix(NA, ncol = ncol(df) + 1, nrow = 0))
+names(dfStandard) <- c(names(df), "cPayoffS")
+for (i in 1:15){   #number of rounds 
+  for (j in 1:50){ #number of games
+    temp = df[(df$game == j & df$round == i), ]
+    temp$cPayoffS <- standardize(temp$cumulativePayoff)
+    dfStandard <- rbind(dfStandard, temp)
+  }
+} 
+
+dfStandard2 <- as.data.frame(matrix(NA, ncol = ncol(df) + 1, nrow = 0))
+names(dfStandard2) <- c(names(df), "cPayoffS")
+for (i in 1:15){   #number of rounds 
+  for (j in 1:50){ #number of games
+    temp = df[(df$game == j & df$round == i), ]
+    temp$cPayoffS <- standardize(temp$cumulativePayoff)
+    dfStandard2 <- rbind(dfStandard2, temp)
+  }
+} 
+
+library(lme4)
+fit1 <- lmer(data = df, happ ~ showScore + (1|game) + (1|superid))
+summary(fit1)
+
+fit2 <- lmer(data = df, happ ~ showScore * cumulativePayoff + (1|game) + (1|superid))
+summary(fit2)
+
+fit2b <- lmer(data = dfStandard2, happ ~ showScore * cPayoffS + factor(round) + (1|game) + (1|superid))
+summary(fit2b)
+
+fit3 <- lmer(data = df, happ ~ showScore * local_gini + factor(round) + (1|game) + (1|superid))
+summary(fit3)
+
+fit4 <- lmer(data = dfStandard, happ ~ showScore * local_gini + cPayoffS * showScore + factor(round) +(1|game) + (1|superid))
+summary(fit4)
+
+fit5 <- lmer(data = dfStandard, happ ~ showScore * local_gini + showScore * local_avg_wealth +factor(round) + cPayoffS * showScore + factor(round) +(1|game) + (1|superid))
+summary(fit5)
+
+vis <- df[df$showScore == "true",]
+invis <- df[df$showScore == "false",]
+
+
+fit5v <- lmer(data = vis, happ ~ cPayoffS + local_gini + local_avg_wealth + factor(round) +(1|game) + (1|superid))
+summary(fit5v)
+
+fit5iv <- lmer(data = invis, happ ~ cPayoffS + local_gini + local_avg_wealth  + factor(round) +(1|game) + (1|superid))
+summary(fit5iv)
+
+
+df$happ <- ifelse(df$satisfaction == "v_good", 4, ifelse(df$satisfaction == "good", 3, 
+                                                         ifelse(df$satisfaction == "neutral", 2,
+                                                                ifelse(df$satisfaction == "bad", 1, 
+                                                                       ifelse(df$satisfaction == "v_bad", 0, NA)))))
+
+
+
+df$e_happ <- ifelse(df$e_satisfaction == "v_good", 4, ifelse(df$e_satisfaction == "good", 3, 
+                                                         ifelse(df$e_satisfaction == "neutral", 2,
+                                                                ifelse(df$e_satisfaction == "bad", 1, 
+                                                                       ifelse(df$e_satisfaction == "v_bad", 0, NA)))))
+
+
+df$vis <- 
+
+fit6 <- lmer(data = df, happ ~ e_happ * showScore + cur_local_rate_coop * showScore + local_avg_stdwealth * showScore + (1|game) + factor(round) + (1|superid))
+summary(fit6)
+vis2 <- df[df$showScore == "true",]
+
+mod1 <- lmer(data = vis, happ ~ e_happ + (1|game) + (1|superid) + factor(round))
+mod2 <- lmer(data = vis, happ ~  e_happ + cur_local_rate_coop + behavior + (1|game) + (1|superid) + factor(round))
+mod3 <- lmer(data = vis, happ ~ e_happ + cur_local_rate_coop + behavior + cPayoffS + rel_wealth + local_gini + (1|game) + (1|superid) + factor(round))
+
+summary(mod1)
+summary(mod2)
+summary(mod3)
+
+anova(mod1, mod2)
+anova(mod3, mod2)
+
+
+fit6b <- lmer(data = vis, happ ~ e_happ + cur_local_rate_coop + behavior + cPayoffS + rel_wealth + local_gini + (1|game) + (1|superid) + factor(round))
+summary(fit6b)
+
+
+mod4 <- lmer(data = vis, happ ~ e_happ + cur_local_rate_coop + behavior + cPayoffS + rel_wealth  + gini0.1.0.2 + gini0.2.0.3 + gini0.3.0.4 + gini0.4.0.5 + gini0.5 + (1|game) + (1|superid) + factor(round))
+summary(mod4)
+
+vis$gini0.0.0.1 <- (vis$local_gini > 0.0) & (vis$local_gini <= 0.1) 
+vis$gini0.1.0.2 <- (vis$local_gini > 0.1) & (vis$local_gini <= 0.2) 
+vis$gini0.2.0.3 <- (vis$local_gini > 0.2) & (vis$local_gini <= 0.3) 
+vis$gini0.3.0.4 <- (vis$local_gini > 0.3) & (vis$local_gini <= 0.4) 
+vis$gini0.4.0.5 <- (vis$local_gini > 0.4) & (vis$local_gini <= 0.5) 
+vis$gini0.5 <- (vis$local_gini > 0.5)
+
+
+mod1a <- lmer(data = invis, happ ~ e_happ + (1|game) + (1|superid) + factor(round))
+mod2a <- lmer(data = invis, happ ~  e_happ + cur_local_rate_coop + behavior + (1|game) + (1|superid) + factor(round))
+mod3a <- lmer(data = invis, happ ~ e_happ + cur_local_rate_coop + behavior + cPayoffS + rel_wealth + local_gini + (1|game) + (1|superid) + factor(round))
+
+summary(mod1a)
+summary(mod2a)
+summary(mod3a)
+
+ggplot(data = vis) + geom_jitter(aes(x = local_gini, y = happ),width = 0.05, height = 0.05) + geom_smooth(aes(x = local_gini, y = happ),se = F)
+
+
+#Look at behavior times
+
+ggplot(data = df) + geom_jitter(aes(x = behaviorTime, y = happ, color = showScore)) + stat_smooth(aes(x = behaviorTime, y = happ, col = showScore))
+ggplot(data = df) + geom_jitter(aes(x = e_behaviorTime, y = happ, color = showScore)) + stat_smooth(aes(x = behaviorTime, y = happ, col = showScore))
+ggplot(data = df) + stat_smooth(aes(x = behaviorTime, y = happ, col= showScore), se = T)
+ggplot(data = df) + stat_smooth(aes(x = behaviorTime, y = happ, col = showScore), se = F, method = lm)
+ggplot(data = df) + geom_histogram(aes(x = behaviorTime))
+
+ggplot(data = df) + geom_boxplot(aes(y = behaviorTime, x = showScore, col = showScore))
+summary(lmer(behaviorTime ~ showScore + (1|superid), data = df))
+summary(lm(behaviorTime ~ showScore, data = df))
+
+summary(lmer(behaviorTime ~ showScore + (1|superid), data = df))
+
+vis <- df[df$showScore == "true",]
+invis <- df[df$showScore == "false",]
+
+summary(lmer(behaviorTime ~ cPayoffS + local_gini +  (1|superid) + (1|game), data = vis))
+summary(lmer(behaviorTime ~ cPayoffS + local_gini +  (1|superid) + (1|game), data = invis))
+
+ggplot(data = df) + geom_point(aes(y = behaviorTime, x = cPayoffS, col = showScore)) +  geom_smooth(aes(y = behaviorTime, x = cPayoffS, col = showScore))
+ggplot(data = df) + geom_smooth(aes(y = behaviorTime, x = cPayoffS, col = showScore), method = lm)
+ggplot(data = df) + geom_smooth(aes(y = behaviorTime, x = cPayoffS, col = showScore), method = loess)
+ggplot(data = df) + geom_smooth(aes(y = behaviorTime, x = local_gini, col = showScore), method = loess)
+ggplot(data = df) + geom_point(aes(y = behaviorTime, x = local_gini, col = showScore))
+
+
+ggplot(data = df) + geom_smooth(aes(y = behaviorTime, x = cumulativePayoff, col = showScore), method = lm)
+ggplot(data = df) + geom_smooth(aes(y = behaviorTime, x = cumulativePayoff, col = showScore), method = lm)
+
+ggplot(data = df) + geom_smooth(aes(y = behaviorTime, x = prev_local_rate_coop, col = showScore), method = lm)
+summary(lmer(data = df, behaviorTime ~ prev_local_rate_coop + (1|game) + (1|superid)))
+
+ggplot(data = vis) + geom_histogram(aes(x = cPayoffS))
+ggplot(data = invis) + geom_histogram(aes(x = cPayoffS)) 
+ggplot(data = invis) + geom_density(aes(x = cPayoffS))
+ggplot(data = vis) + geom_density(aes(x = cPayoffS))
+
+ggplot(data = df) + geom_boxplot(aes(y = behaviorTime, x = gender))
+
+names(ndata1)
+
+mod1 <- svm(factor(behavior) ~ factor(e_behavior) + local_gini + behaviorTime + superid, data = df, gamma = 0.01, cost = 100, cross = 10)
+mod1$accuracies
+mod1$tot.accuracy
+100 * sum(df$behavior == 1, na.rm = T) / sum(df$behavior == 1 | df$behavior == 0, na.rm = T)
+
+ggplot(data = df) + geom_smooth(aes(y = happ, x = behaviorTime, col = showScore))
+
+
+
+
+
+
+
+
+glmer(formula + (1|game), data, family = "binomial")
+lu = function(x){length(unique(x$superid))}
+dfl <- as.data.frame(matrix(NA, nrow = 50, ncol = 2))
+names(dfl) <- c("game", "nparticipants")
+counter = 1
+for (i in unique(lastround$game)){
+  dfl[counter, 1] = i
+  dfl[counter, 2] = lu(lastround[lastround$game == i, ])
+  counter = counter + 1
+}
+dfl
