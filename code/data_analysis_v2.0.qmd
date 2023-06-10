@@ -16,6 +16,7 @@ library(tidyverse)
 library(igraph)
 library(lme4)
 library(lmerTest)
+library(DescTools)
 library(data.table)
 library(broom.mixed)
 library(patchwork)
@@ -45,6 +46,13 @@ se_mean = function(x) sd1(x)/sqrt(sum(is.na(x) == 0))
 
 ## Descriptive Analysis
 
+```{r}
+data1_pc %>%
+  filter(round != 0)
+
+exp4data %>%
+  filter(round != 0)
+```
 ### Per-game characteristics
 
 ```{r, message = F}
@@ -74,15 +82,19 @@ exp4data %>%
 
 ```{r}
 # Behavior breakdown - Experiment A
-data1_pc %>%
+data1_behavior_count = data1_pc %>%
   mutate(behavior = case_when(behavior_coop == 1 ~ "C",
                               behavior_defect == 1 ~ "D",
                               behavior_punish == 1 ~ "P")) %>%
   group_by(behavior) %>%
-  filter(behavior %in% c("C", "D", "P")) %>%
+  filter(behavior %in% c("C", "D", "P"), round > 0) %>%
   summarize(count = n()) %>%
   ungroup() %>%
   mutate(proportion = count/sum(count))
+
+# Confidence Intervals 
+data1_behavior_CI = MultinomCI(x = c(4878, 4336, 652), sides = "two.sided") %>%
+  as_tibble()
 ```
 
 ```{r}
@@ -95,23 +107,41 @@ data1_pc %>%
 ```
 
 ```{r}
-# Behavior breakdown - Experiment B, TP-
+# Behavior breakdown - Experiment B
 exp4data %>%
+  group_by(behavior) %>%
+  filter(round >0, behavior %in% c("C", "D", "P")) %>%
+  summarize(count = n()) %>%
+  ungroup() %>%
+  mutate(proportion = count/sum(count))
+
+MultinomCI(c(4185, 5790, 679), sides = "two.sided")
+```
+
+```{r}
+# Behavior breakdown - Experiment B, TP-
+exp4data_tp_minus_count = exp4data %>%
   group_by(behavior) %>%
   filter(time_pressure == "Minus", behavior %in% c("C", "D", "P")) %>%
   summarize(count = n()) %>%
   ungroup() %>%
   mutate(proportion = count/sum(count))
+
+exp4data_tp_minus_CI = MultinomCI(c(2013, 2893, 341), sides = "two.sided")
+
+
 ```
 ```{r}
 # Behavior breakdown - Experiment B, TP+
-
 exp4data %>%
   group_by(behavior) %>%
   filter(time_pressure == "Plus", behavior %in% c("C", "D", "P")) %>%
   summarize(count = n()) %>%
   ungroup() %>%
   mutate(proportion = count/sum(count))
+
+MultinomCI(c(2172, 2897, 338))
+sum(2172, 2897, 338)
 ```
 
 ```{r}
@@ -141,27 +171,104 @@ mean1(data1_pc$degree)
 mean1(exp4data$degree)
 ```
 
+### Payoff
+
+```{r}
+mean1(exp4data$cumulativePayoff)
+(935/1589)*3.59
+```
+
+```{r}
+# Fig 1A
+exp1_fig1_data = bind_cols(data1_behavior_count, data1_behavior_CI, data1_times)[-7] 
+names(exp1_fig1_data) = c("behavior", "count", "crude_prop", "adjusted_prop", "LL", "UL",
+                          "mean_dt", "recentered_mean_dt", "se_mean_dt")
+exp1_fig1_data
+```
+```{r}
+exp1_fig1_data %>%
+  ggplot() +
+  aes(x = behavior, y = adjusted_prop, fill = behavior) +
+  geom_bar(stat = "identity", width = 0.75, alpha = 0.5) +
+  geom_errorbar(aes(ymin = LL, ymax = UL, color = factor(behavior)), width = 0) +
+  theme_classic() +
+  scale_y_continuous(limits = c(0, 0.6), breaks = seq(0, 0.6, by = 0.2), expand = c(0, 0)) +
+  ylab("Proportion")+
+  facet_grid(~behavior, 
+             scales = "free_x", # Let the x axis vary across facets.
+             space = "free_x",  # Let the width of facets vary and force all bars to have the same width.
+             switch = "x") +   # Move the facet labels to the bottom.
+  scale_fill_manual(values = c("#00A5CF", "#FFBF00", "#574AE2")) +
+  scale_color_manual(values = c("dodgerblue4", "darkorange3", "#574AE2")) +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank())
+```
+
 ## Behavior time
 
 ```{r}
 # Times per behavior
-data1_pc %>%
+data1_times = data1_pc %>%
   mutate(behavior = case_when(behavior_coop == 1 ~ "C",
                               behavior_defect == 1 ~ "D",
                               behavior_punish == 1 ~ "P")) %>%
   group_by(behavior) %>%
   filter(behavior %in% c("C", "D", "P")) %>%
   summarize(mean_dt = mean1(behaviorTime/1000),
+            mean_dt_adjusted = mean1((behaviorTime - 4500)/1000),
+            se_mean_dt = se_mean(behaviorTime/1000))
+```
+
+### Stratify by presence of harmers in last round
+
+```{r}
+data1_pc = data1_pc %>%
+  mutate(previously_harmed = ifelse(local_rate_punish_lag == 0, 0, 1),
+         behavior = case_when(behavior_coop == 1 ~ "C",
+                              behavior_defect == 1 ~ "D",
+                              behavior_punish == 1 ~ "P"))
+```
+
+```{r}
+exp4data = exp4data %>%
+  mutate(previously_harmed = ifelse(local_rate_punish_lag == 0, 0, 1),
+         behavior = case_when(behavior_coop == 1 ~ "C",
+                              behavior_defect == 1 ~ "D",
+                              behavior_punish == 1 ~ "P"))
+```
+
+```{r}
+data1_pc %>%
+  mutate(previously_harmed = ifelse(local_rate_punish_lag == 0, 0, 1),
+         behavior = case_when(behavior_coop == 1 ~ "C",
+                              behavior_defect == 1 ~ "D",
+                              behavior_punish == 1 ~ "P")) %>%
+  group_by(previously_harmed, behavior) %>%
+  filter(behavior %in% c("C", "D", "P"), previously_harmed %in% 0:1) %>%
+  summarize(mean_dt = mean1(behaviorTime/1000),
+            mean_dt_adjusted = mean1((behaviorTime - 4500)/1000),
             se_mean_dt = se_mean(behaviorTime/1000))
 ```
 
 ```{r}
 ## Behavior times, TP-
-exp4data %>%
+exp4_tp_minus_times = exp4data %>%
   group_by(behavior) %>%
   filter(time_pressure == "Minus", behavior %in% c("C", "D", "P")) %>%
   summarize(mean_dt = mean1(behaviorTime/1000),
             se_mean_dt = se_mean(behaviorTime/1000))
+```
+
+```{r}
+exp4_tp_minus_fig1 = bind_cols(exp4data_tp_minus_count, exp4data_tp_minus_CI, exp4_tp_minus_times)[-7]
+names(exp4_tp_minus_fig1) = c("behavior", "count", "prop", "adjusted_prop", 
+                              "LL", "UL", "mean_dt", "se_mean_dt")
+exp4_tp_minus_fig1
 ```
 
 ```{r}
@@ -173,36 +280,48 @@ exp4data %>%
             se_mean_dt = se_mean(behaviorTime/1000))
 ```
 
+```{r}
+exp4data %>%
+  group_by(time_pressure) %>%
+  summarize(mean_payoff = mean1(cumulativePayoff),
+            se_mean_payoff = se_mean(cumulativePayoff))
+```
+
 # Regression modeling
 
 ```{r}
-m1.1 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + happ_lag+ factor(round) + (1|game) + (1|superid), data = data1_pc, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
-se = sqrt(diag(vcov(m1.1)))
-# table of estimates with 95% CI
-tab_m1.1 = cbind(Est = fixef(m1.1), LL = fixef(m1.1) - 1.96 * se, UL = fixef(m1.1) + 1.96 * se)
-round(exp(tab_m1.1), digits = 3)[1:11,]
+exp1_modeling = data1_pc %>% filter(round > 0)
+exp4_modeling = exp4data %>% filter(round > 0)
 ```
+
+## Harming as the outcome
+
 ```{r}
-names(exp4data)
+m1 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag +  + factor(round) + (1|game) + (1|superid), data = data1_modeling, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 
-exp4data_test1 = exp4data %>%
-  filter(round > 0)
-
-exp4data_test = exp4data %>% filter(round != 0)
-
-m2.9 = glmer(behavior_punish ~ time_pressure +  behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + factor(round) + (1|game) + (1|superid),  data = exp4data_test1, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
-
-tidy(m2.9, conf.int=TRUE, exponentiate=TRUE) %>%
+tidy(m1, conf.int=TRUE, exponentiate=TRUE) %>%
   select(term, estimate, conf.low, conf.high, p.value) %>%
   rename(Term = term, Estimate = estimate, 
          LL = conf.low, UL = conf.high, p = p.value) %>%
   mutate(across(where(is.numeric), round, 4)) %>%
   select(Term, Estimate, LL, UL, p) %>%
-  head(8) 
+  head(10) 
 ```
 
 ```{r}
-m3 = glmer(behavior_punish ~ time_pressure + factor(round) + (1|game) + (1|superid),  data = exp4data_test1, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+m2 = glmer(behavior_punish ~ time_pressure + factor(round) + (1|game) + (1|superid),  data = exp4_modeling, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+tidy(m2, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(2) 
+```
+
+```{r}
+m3 = glmer(behavior_punish ~ time_pressure +  behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag + factor(round) + (1|game) + (1|superid),  data = exp4_modeling, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 
 tidy(m3, conf.int=TRUE, exponentiate=TRUE) %>%
   select(term, estimate, conf.low, conf.high, p.value) %>%
@@ -211,4 +330,37 @@ tidy(m3, conf.int=TRUE, exponentiate=TRUE) %>%
   mutate(across(where(is.numeric), round, 4)) %>%
   select(Term, Estimate, LL, UL, p) %>%
   head(8) 
+```
+
+## Behavior time as the outcome
+
+```{r}
+m4 = lmer(behaviorTime ~ previously_harmed + behavior + factor(round) + (1|game) + (1|superid),  data = exp1_modeling)
+
+tidy(m4, conf.int=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(8) 
+```
+
+```{r}
+
+m5 = lmer(behaviorTime ~ previously_harmed + behavior + factor(round) + (1|game) + (1|superid),  data = exp4_modeling)
+
+tidy(m5, conf.int=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(8) 
+```
+
+## Payoff as the outcome
+
+```{r}
+m4 = 
 ```
