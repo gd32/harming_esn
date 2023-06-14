@@ -53,6 +53,7 @@ data1_pc %>%
 exp4data %>%
   filter(round != 0)
 ```
+
 ### Per-game characteristics
 
 ```{r, message = F}
@@ -66,6 +67,7 @@ data1_pc %>%
             `Min Players` = min(n),
             `Max Players` = max(n))
 ```
+
 ```{r, message = F}
 # Players per game, min, max - Experiment B
 exp4data %>%
@@ -128,20 +130,18 @@ exp4data_tp_minus_count = exp4data %>%
   mutate(proportion = count/sum(count))
 
 exp4data_tp_minus_CI = MultinomCI(c(2013, 2893, 341), sides = "two.sided")
-
-
 ```
+
 ```{r}
 # Behavior breakdown - Experiment B, TP+
-exp4data %>%
+exp4data_tp_plus_count = exp4data %>%
   group_by(behavior) %>%
   filter(time_pressure == "Plus", behavior %in% c("C", "D", "P")) %>%
   summarize(count = n()) %>%
   ungroup() %>%
   mutate(proportion = count/sum(count))
 
-MultinomCI(c(2172, 2897, 338))
-sum(2172, 2897, 338)
+exp4data_tp_plus_CI = MultinomCI(c(2172, 2897, 338), sides = "two.sided")
 ```
 
 ```{r}
@@ -174,39 +174,13 @@ mean1(exp4data$degree)
 ### Payoff
 
 ```{r}
+mean1(data1_pc$cumulativePayoff)
 mean1(exp4data$cumulativePayoff)
-(935/1589)*3.59
-```
 
-```{r}
-# Fig 1A
-exp1_fig1_data = bind_cols(data1_behavior_count, data1_behavior_CI, data1_times)[-7] 
-names(exp1_fig1_data) = c("behavior", "count", "crude_prop", "adjusted_prop", "LL", "UL",
-                          "mean_dt", "recentered_mean_dt", "se_mean_dt")
-exp1_fig1_data
-```
-```{r}
-exp1_fig1_data %>%
-  ggplot() +
-  aes(x = behavior, y = adjusted_prop, fill = behavior) +
-  geom_bar(stat = "identity", width = 0.75, alpha = 0.5) +
-  geom_errorbar(aes(ymin = LL, ymax = UL, color = factor(behavior)), width = 0) +
-  theme_classic() +
-  scale_y_continuous(limits = c(0, 0.6), breaks = seq(0, 0.6, by = 0.2), expand = c(0, 0)) +
-  ylab("Proportion")+
-  facet_grid(~behavior, 
-             scales = "free_x", # Let the x axis vary across facets.
-             space = "free_x",  # Let the width of facets vary and force all bars to have the same width.
-             switch = "x") +   # Move the facet labels to the bottom.
-  scale_fill_manual(values = c("#00A5CF", "#FFBF00", "#574AE2")) +
-  scale_color_manual(values = c("dodgerblue4", "darkorange3", "#574AE2")) +
-  theme(panel.grid.minor = element_blank(),
-        panel.grid.major = element_blank(),
-        legend.position = "none",
-        axis.title.x = element_blank(),
-        axis.text.x = element_blank(),
-        axis.ticks.x = element_blank(),
-        axis.ticks.y = element_blank())
+exp4data %>%
+  group_by(time_pressure) %>%
+  summarize(mean_payoff = mean1(cumulativePayoff),
+            se_mean_payoff = se_mean(cumulativePayoff))
 ```
 
 ## Behavior time
@@ -265,26 +239,204 @@ exp4_tp_minus_times = exp4data %>%
 ```
 
 ```{r}
-exp4_tp_minus_fig1 = bind_cols(exp4data_tp_minus_count, exp4data_tp_minus_CI, exp4_tp_minus_times)[-7]
-names(exp4_tp_minus_fig1) = c("behavior", "count", "prop", "adjusted_prop", 
-                              "LL", "UL", "mean_dt", "se_mean_dt")
-exp4_tp_minus_fig1
 ```
 
 ```{r}
 ## Behavior times, TP+
-exp4data %>%
+exp4data_tp_plus_times = exp4data %>%
   group_by(behavior) %>%
   filter(time_pressure == "Plus", behavior %in% c("C", "D", "P")) %>%
   summarize(mean_dt = mean1(behaviorTime/1000),
             se_mean_dt = se_mean(behaviorTime/1000))
 ```
 
+## Figure 1 - Behavior Frequencies and Decision Time, Experiment A
+
 ```{r}
-exp4data %>%
-  group_by(time_pressure) %>%
-  summarize(mean_payoff = mean1(cumulativePayoff),
-            se_mean_payoff = se_mean(cumulativePayoff))
+# Fig 1A
+exp1_fig1_data = bind_cols(data1_behavior_count, data1_behavior_CI, data1_times)[-7] 
+names(exp1_fig1_data) = c("behavior", "count", "crude_prop", "adjusted_prop", "LL", "UL",
+                          "mean_dt", "recentered_mean_dt", "se_mean_dt")
+exp1_fig1_data = exp1_fig1_data %>%
+  mutate(behavior = ifelse(behavior == "P", "H", behavior))
+```
+
+```{r}
+exp1_fig1_A = exp1_fig1_data %>%
+  ggplot() +
+  aes(x = behavior, y = adjusted_prop, fill = behavior) +
+  geom_bar(stat = "identity", width = 0.75, alpha = 0.5) +
+  geom_errorbar(aes(ymin = LL, ymax = UL, color = factor(behavior)), width = 0) +
+  theme_classic() +
+  scale_y_continuous(limits = c(0, 0.6), breaks = seq(0, 0.6, by = 0.2), expand = c(0, 0)) +
+  ylab("Proportion")+
+  facet_grid(~behavior, 
+             scales = "free_x", # Let the x axis vary across facets.
+             space = "free_x",  # Let the width of facets vary and force all bars to have the same width.
+             switch = "x") +   # Move the facet labels to the bottom.
+  scale_fill_manual(values = c("#00A5CF", "#FFBF00", "#574AE2")) +
+  scale_color_manual(values = c("dodgerblue4", "darkorange3", "#574AE2")) +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank()) 
+```
+
+```{r}
+exp1_fig1_B = exp1_fig1_data %>%
+  ggplot() +
+  aes(x = behavior, y = recentered_mean_dt, fill = behavior) +
+  geom_bar(stat = "identity", width = 0.75, alpha = 0.5) +
+  geom_errorbar(aes(ymin = recentered_mean_dt - se_mean_dt, 
+                    ymax = recentered_mean_dt + se_mean_dt, 
+                    color = factor(behavior)), width = 0) +
+  theme_classic() +
+  scale_y_continuous(limits = c(0, 6), breaks = seq(0, 6, by = 1), expand = c(0, 0)) +
+  ylab("Decision time (seconds)")+
+  facet_grid(~behavior, 
+             scales = "free_x", # Let the x axis vary across facets.
+             space = "free_x",  # Let the width of facets vary and force all bars to have the same width.
+             switch = "x") +   # Move the facet labels to the bottom.
+  scale_fill_manual(values = c("#00A5CF", "#FFBF00", "#574AE2")) +
+  scale_color_manual(values = c("dodgerblue4", "darkorange3", "#574AE2")) +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank())
+```
+
+```{r}
+exp1_fig1_A / exp1_fig1_B
+```
+
+## Figure 1 - Behavior frequencies and Decision Time, Experiment B
+
+```{r}
+exp4_tp_plus_fig1_data = bind_cols(exp4data_tp_plus_count, exp4data_tp_plus_CI, exp4data_tp_plus_times)[-7]
+names(exp4_tp_plus_fig1_data) = c("behavior", "count", "crude_prop", 
+                                  "adjusted_prop", "LL", "UL", "mean_dt", 
+                                  "se_mean_dt")
+exp4_tp_plus_fig1_data = exp4_tp_plus_fig1_data %>%
+  mutate(behavior = ifelse(behavior == "P", "H", behavior))
+
+exp4_tp_minus_fig1_data = bind_cols(exp4data_tp_minus_count, exp4data_tp_minus_CI, exp4_tp_minus_times)[-7]
+names(exp4_tp_minus_fig1_data) = c("behavior", "count", "prop", "adjusted_prop", 
+                              "LL", "UL", "mean_dt", "se_mean_dt")
+exp4_tp_minus_fig1_data = exp4_tp_minus_fig1_data %>%
+  mutate(behavior = ifelse(behavior == "P", "H", behavior))
+```
+
+```{r}
+exp4_fig1_A = exp4_tp_plus_fig1_data %>%
+  ggplot() +
+  aes(x = behavior, y = adjusted_prop, fill = behavior) +
+  geom_bar(stat = "identity", width = 0.75, alpha = 0.5) +
+  geom_errorbar(aes(ymin = LL, ymax = UL, color = factor(behavior)), width = 0) +
+  theme_classic() +
+  scale_y_continuous(limits = c(0, 0.6), breaks = seq(0, 0.6, by = 0.2), expand = c(0, 0)) +
+  ylab("Proportion")+
+  facet_grid(~behavior, 
+             scales = "free_x", # Let the x axis vary across facets.
+             space = "free_x",  # Let the width of facets vary and force all bars to have the same width.
+             switch = "x") +   # Move the facet labels to the bottom.
+  scale_fill_manual(values = c("#00A5CF", "#FFBF00", "#574AE2")) +
+  scale_color_manual(values = c("dodgerblue4", "darkorange3", "#574AE2")) +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        legend.position = "none",
+        plot.title = element_text(size = 8),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank()) 
+exp4_fig1_B = exp4_tp_plus_fig1_data %>%
+  ggplot() +
+  aes(x = behavior, y = mean_dt, fill = behavior) +
+  geom_bar(stat = "identity", width = 0.75, alpha = 0.5) +
+  geom_errorbar(aes(ymin = mean_dt - se_mean_dt, 
+                    ymax = mean_dt + se_mean_dt, 
+                    color = factor(behavior)), width = 0) +
+  theme_classic() +
+  scale_y_continuous(limits = c(0, 6), breaks = seq(0, 6, by = 2), expand = c(0, 0)) +
+  ylab("Decision time (seconds)")+
+  facet_grid(~behavior, 
+             scales = "free_x", # Let the x axis vary across facets.
+             space = "free_x",  # Let the width of facets vary and force all bars to have the same width.
+             switch = "x") +   # Move the facet labels to the bottom.
+  scale_fill_manual(values = c("#00A5CF", "#FFBF00", "#574AE2")) +
+  scale_color_manual(values = c("dodgerblue4", "darkorange3", "#574AE2")) +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank())
+
+exp4_fig1_C = exp4_tp_minus_fig1_data %>%
+  ggplot() +
+  aes(x = behavior, y = adjusted_prop, fill = behavior) +
+  geom_bar(stat = "identity", width = 0.75, alpha = 0.5) +
+  geom_errorbar(aes(ymin = LL, ymax = UL, color = factor(behavior)), width = 0) +
+  theme_classic() +
+  scale_y_continuous(limits = c(0, 0.6), breaks = seq(0, 0.6, by = 0.2), expand = c(0, 0)) +
+  ylab("Proportion")+
+  facet_grid(~behavior, 
+             scales = "free_x", # Let the x axis vary across facets.
+             space = "free_x",  # Let the width of facets vary and force all bars to have the same width.
+             switch = "x") +   # Move the facet labels to the bottom.
+  scale_fill_manual(values = c("#00A5CF", "#FFBF00", "#574AE2")) +
+  scale_color_manual(values = c("dodgerblue4", "darkorange3", "#574AE2")) +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        legend.position = "none",        
+        plot.title = element_text(size = 8),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank()) 
+exp4_fig1_D = exp4_tp_minus_fig1_data %>%
+  ggplot() +
+  aes(x = behavior, y = mean_dt, fill = behavior) +
+  geom_bar(stat = "identity", width = 0.75, alpha = 0.5) +
+  geom_errorbar(aes(ymin = mean_dt - se_mean_dt, 
+                    ymax = mean_dt + se_mean_dt, 
+                    color = factor(behavior)), width = 0) +
+  theme_classic() +
+  scale_y_continuous(limits = c(0, 6), breaks = seq(0, 6, by = 2), expand = c(0, 0)) +
+  ylab("Decision time (seconds)")+
+  facet_grid(~behavior, 
+             scales = "free_x", # Let the x axis vary across facets.
+             space = "free_x",  # Let the width of facets vary and force all bars to have the same width.
+             switch = "x") +   # Move the facet labels to the bottom.
+  scale_fill_manual(values = c("#00A5CF", "#FFBF00", "#574AE2")) +
+  scale_color_manual(values = c("dodgerblue4", "darkorange3", "#574AE2")) +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank())
+```
+
+```{r}
+(exp1_fig1_A / exp1_fig1_B) +
+  plot_annotation(title = "Behavior frequency and decision times, Experiment A",
+                  theme = theme(plot.title = element_text(size = 12)))
+
+ggsave(filename = "~/Documents/Projects/harming_esn/figures/fig1_top_v2.2.png", width = 8, height = 6, units = "in")
+
+(exp4_fig1_A + exp4_fig1_C) / (exp4_fig1_B + exp4_fig1_D) +
+  plot_annotation(title = "Behavior frequency and decision times, Experiment B, TP+ (left) and TP- (right)", theme = theme(plot.title = element_text(size = 12)))
+
+ggsave(filename = "~/Documents/Projects/harming_esn/figures/fig1_bottom_v2.2.png", width = 8, height = 6, units = "in")
 ```
 
 # Regression modeling
@@ -332,6 +484,20 @@ tidy(m3, conf.int=TRUE, exponentiate=TRUE) %>%
   head(8) 
 ```
 
+## Cooperation as the outcome
+
+```{r}
+m2.1 = glmer(behavior_coop ~ time_pressure + factor(round) + (1|game) + (1|superid),  data = exp4_modeling, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+tidy(m2.1, conf.int=TRUE, exponentiate=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(2) 
+```
+
 ## Behavior time as the outcome
 
 ```{r}
@@ -361,6 +527,14 @@ tidy(m5, conf.int=TRUE) %>%
 
 ## Payoff as the outcome
 
-```{r}
-m4 = 
+```{r, warning = F, message = F}
+m6 = lmer(cumulativePayoff ~ time_pressure + factor(round) + (1|game) + (1|superid), data = exp4_modeling)
+
+tidy(m6, conf.int=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(8) 
 ```
