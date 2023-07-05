@@ -2,6 +2,7 @@ rm(list = ls())
 load("~/Documents/Projects/harming_esn/data/exp4/exp4_subdata/exp4data.Rdata")
 library(tidyverse)
 library(rgeolocate)
+library(igraph)
 
 #renaming some variable names
 harmdata = harmdata %>% rename(local_rate_coop = cur_local_rate_coop, 
@@ -70,7 +71,7 @@ data0 = harmdata %>% dplyr::select(game, superid, time_pressure, round, age, gen
                                    behavior_punish, local_rate_coop, 
                                    local_rate_defect, local_rate_punish, happ, 
                                    behaviorTime, degree, e_degree, initial_coop,
-                                   initial_defect, initial_punish)
+                                   initial_defect, initial_punish, timeUp.x)
 
 #extract lagged data
 ##1-round lag
@@ -79,7 +80,7 @@ data_lag = data0 %>% dplyr::select(superid, round, initial_score, payoff,
                                    behavior_coop, local_rate_coop, 
                                    behavior_defect, local_rate_defect, 
                                    behavior_punish, local_rate_punish, 
-                                   degree, happ, behaviorTime)
+                                   degree, happ, behaviorTime, timeUp.x)
 names(data_lag)[-c(1,2)] = paste0(names(data_lag)[-c(1,2)],"_lag")
 data_lag$round = data_lag$round + 1
 
@@ -132,6 +133,10 @@ for(i in 1:50){
 data1 = merge(data1, cent_df, by = "superid")
 
 exp4data = data1
+exp4data = exp4data %>%
+  rename(timeout = timeUp.x,
+         timeout_lag = timeUp.x_lag) %>%
+  unnest(cols = c(timeout, timeout_lag))
 save(exp4data, file = "~/Documents/Projects/harming_esn/data/exp4/exp4data.Rdata")
 
 #replace NaNs (from missing lag data) with NAs

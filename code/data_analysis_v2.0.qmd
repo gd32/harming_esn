@@ -33,6 +33,29 @@ load("~/Documents/Projects/harming_esn/data/exp1/data1_pc_v2.Rdata")
 load("~/Documents/Projects/harming_esn/data/exp4/exp4data.Rdata")
 ```
 
+## Create grouping variables
+
+```{r}
+# define social environment variable from the previous round
+# since the rate of punishment, call it coop vs. non-cooperative (i.e. either 
+# punish or defecting)
+data1_pc = data1_pc %>%
+  mutate(social_env_lag = 
+           case_when(local_rate_punish_lag > 0.5 | 
+                       local_rate_defect_lag > 0.5 ~ "NC",
+                                    local_rate_coop_lag > 0.5 ~ "C",
+                                    TRUE ~ "U"))
+# U is unknown environment
+exp4data = exp4data %>%
+    mutate(social_env_lag = 
+           case_when(local_rate_punish_lag > 0.5 | 
+                       local_rate_defect_lag > 0.5 ~ "NC",
+                                    local_rate_coop_lag > 0.5 ~ "C",
+                                    TRUE ~ "U"))
+
+
+```
+
 ## Create helper functions
 
 ```{r}
@@ -50,8 +73,30 @@ se_mean = function(x) sd1(x)/sqrt(sum(is.na(x) == 0))
 data1_pc %>%
   filter(round != 0)
 
-exp4data %>%
-  filter(round != 0)
+data1_pc = data1_pc %>%
+  mutate(behavior = case_when(behavior_coop == 1 ~ "C",
+                              behavior_defect == 1 ~ "D",
+                              behavior_punish == 1 ~ "P"),
+         behavior_lag = case_when(behavior_coop_lag == 1 ~ "C",
+                                  behavior_defect_lag == 1 ~ "D",
+                                  behavior_punish_lag == 1 ~ "P")) 
+
+data1_pc %>%
+  ggplot(aes(x = local_rate_punish_lag)) +
+  stat_bin(binwidth=0.075) +
+  stat_bin(binwidth=0.075, 
+           geom="text", 
+           aes(label=after_stat(count), boundary = 0.075), 
+           vjust=0) +
+  scale_x_continuous(breaks = seq(0, 1, by = 0.075))
+
+data1_pc$local_rate_punish_lag
+
+hist(data1_pc$local_rate_punish_lag, 
+     xlim = c(0, 1),
+     ylim = c(0, 8000),
+     labels = T,
+     breaks = 15)
 ```
 
 ### Per-game characteristics
@@ -80,6 +125,17 @@ exp4data %>%
             `Max Players` = max(n))
 ```
 
+### Rate of timeout in Exp B, TP+
+
+```{r}
+exp4data %>%
+  filter(time_pressure == "Plus", round > 0) %>%
+  select(superid, game, round, behavior, timeout, behaviorTime_sec)
+
+1341/nrow(exp4data %>% filter(round > 0, time_pressure == "Plus"))
+```
+
+
 ### Behavior breakdown
 
 ```{r}
@@ -97,6 +153,7 @@ data1_behavior_count = data1_pc %>%
 # Confidence Intervals 
 data1_behavior_CI = MultinomCI(x = c(4878, 4336, 652), sides = "two.sided") %>%
   as_tibble()
+data1_behavior_CI
 ```
 
 ```{r}
@@ -130,6 +187,8 @@ exp4data_tp_minus_count = exp4data %>%
   mutate(proportion = count/sum(count))
 
 exp4data_tp_minus_CI = MultinomCI(c(2013, 2893, 341), sides = "two.sided")
+
+exp4data_tp_minus_count
 ```
 
 ```{r}
@@ -142,25 +201,368 @@ exp4data_tp_plus_count = exp4data %>%
   mutate(proportion = count/sum(count))
 
 exp4data_tp_plus_CI = MultinomCI(c(2172, 2897, 338), sides = "two.sided")
+
+exp4data_tp_plus_count
+```
+
+### Experiment A - Stratify by social environment
+
+#### Behavior proportions based on social environment, stratified by round (1 vs other)
+
+```{r}
+## Unknown environment
+exp1_unk_env_rd1_behaviors = data1_pc %>%
+  filter(social_env_lag == "U", round == 1) %>%
+  group_by(behavior) %>%
+  summarize(n = n()) %>%
+  ungroup() %>% 
+  mutate(perc = n/sum(n),
+         total = sum(n),
+         round = "rd1")
+
+exp1_unk_env_rd2_behaviors = data1_pc %>%
+  filter(social_env_lag == "U", round > 1) %>%
+  group_by(behavior) %>%
+  summarize(n = n()) %>%
+  ungroup() %>% 
+  mutate(perc = n/sum(n),
+         total = sum(n),
+         round = "later")
+
+exp1_unk_behaviors = bind_rows(exp1_unk_env_rd1_behaviors, exp1_unk_env_rd2_behaviors)
+
+## Cooperative environment
+exp1_coop_behaviors = data1_pc %>%
+  filter(social_env_lag == "C", round > 1) %>%
+  group_by(behavior) %>%
+  summarize(n = n()) %>%
+  ungroup() %>% 
+  mutate(perc = n/sum(n),
+         total = sum(n),
+         environment = "Cooperative",
+         expt = "A")
+
+
+## Non-cooperative environment
+exp1_noncoop_behaviors = data1_pc %>%
+  filter(social_env_lag == "NC", round > 1) %>%
+  group_by(behavior) %>%
+  summarize(n = n()) %>%
+  ungroup() %>% 
+  mutate(perc = n/sum(n),
+         total = sum(n),
+         environment = "Non-cooperative",
+         expt = "A")
+
+exp1_behaviors_sum = bind_rows(exp1_coop_behaviors, exp1_noncoop_behaviors)
+```
+
+#### Decision times based on social environment, stratified by round (1 vs other)
+
+```{r}
+## Unknown environment
+exp1_unk_env_rd1_time_vec = data1_pc %>%
+  filter(social_env_lag == "U", round == 1) %>%
+  group_by(behavior) %>%
+  select(behaviorTime_sec) %>%
+  pull()
+
+exp1_unk_env_rd1_times = data1_pc %>%
+  filter(social_env_lag == "U", round == 1) %>%
+  group_by(behavior) %>%
+  summarize(mean_dt = mean1(behaviorTime_sec),
+            se_mean_dt = se_mean(behaviorTime_sec))
+
+exp1_unk_env_rd2_time_vec = data1_pc %>%
+  filter(social_env_lag == "U", round > 1) %>%
+  group_by(behavior) %>%
+  select(behaviorTime_sec) %>%
+  pull()
+
+exp1_unk_env_rd2_times = data1_pc %>%
+  filter(social_env_lag == "U", round > 1) %>%
+  group_by(behavior) %>%
+  summarize(mean_dt = mean1(behaviorTime_sec),
+            se_mean_dt = se_mean(behaviorTime_sec))
+
+exp1_unk_times = bind_rows(exp1_unk_env_rd1_times, exp1_unk_env_rd2_times)
+
+## Cooperative environment
+exp1_coop_times = data1_pc %>%
+  filter(social_env_lag == "C", round > 1) %>%
+  group_by(behavior) %>%
+  select(behaviorTime_sec) %>%
+  pull()
+
+exp1_coop_times_sum = data1_pc %>%
+  filter(social_env_lag == "C", round > 1) %>%
+  group_by(behavior) %>%
+  summarize(mean_dt = mean1(behaviorTime_sec_adj),
+            se_mean_dt = se_mean(behaviorTime_sec_adj)) %>%
+  mutate(environment = "Cooperative")
+
+## Non-cooperative environment
+exp1_noncoop_times = data1_pc %>%
+  filter(social_env_lag == "NC", round > 1) %>%
+  group_by(behavior) %>%
+  select(behaviorTime_sec) %>%
+  pull()
+
+exp1_noncoop_times_sum = data1_pc %>%
+  filter(social_env_lag == "NC", round > 1) %>%
+  group_by(behavior) %>%
+  summarize(mean_dt = mean1(behaviorTime_sec_adj),
+            se_mean_dt = se_mean(behaviorTime_sec_adj)) %>%
+  mutate(environment = "Non-cooperative")
+
+
+exp1_times_sum = bind_rows(exp1_coop_times_sum, exp1_noncoop_times_sum) %>%
+  filter(is.na(behavior) == FALSE)
+```
+
+#### Proportions and times, stratified by punished or not in round t-1
+
+```{r}
+exp1_last_punished = data1_pc %>% filter(round > 1, local_rate_punish_lag > 0)
+exp1_last_no_punish = data1_pc %>% filter(round > 1, local_rate_punish_lag == 0)
+
+# Proportions
+exp1_last_punished %>%
+  filter(round > 0) %>%
+  group_by(behavior) %>%
+  summarize(n = n()) %>%
+  ungroup() %>% 
+  mutate(perc = n/sum(n),
+         total = sum(n))
+
+exp1_last_no_punish %>%
+  filter(round > 0) %>%
+  group_by(behavior) %>%
+  summarize(n = n()) %>%
+  ungroup() %>% 
+  mutate(perc = n/sum(n),
+         total = sum(n))
+
+# Times
+exp1_last_punished_times = exp1_last_punished %>%
+  filter(round > 0) %>%
+  select(behaviorTime_sec) %>%
+  pull()
+
+exp1_last_no_punish_times = exp1_last_no_punish %>%
+  filter(round > 0) %>%
+  select(behaviorTime_sec) %>%
+  pull()
+```
+
+#### Hypothesis testing - Proportions
+
+```{r}
+# In unknown environment, round 1 vs rounds > 1
+prop.test(x = c(49, 94), n = c(719, 1664), correct = F) # p = 0.27
+
+# In rounds > 1
+prop.test(x = c(264, 155), n = c(3177, 4422), correct = F) # p < 0.001
+# Significant difference in the proportion of punishment based on social 
+# environment
+```
+
+#### Hypothesis Testing - Times
+
+```{r}
+t.test(exp1_unk_env_rd1_time_vec - 4.5, exp1_unk_env_rd2_time_vec - 4.5, var.equal = F)
+
+t.test(exp1_coop_times - 4.5, exp1_noncoop_times - 4.5, var.equal = F)
+```
+
+### Experiment B, TP-, Stratified analysis
+
+```{r}
+## Unknown environment
+exp4_tp_minus_unk_rd1_behaviors = exp4data %>%
+  filter(social_env_lag == "U", round == 1, time_pressure == "Minus") %>%
+  group_by(behavior) %>%
+  summarize(n = n()) %>%
+  ungroup() %>% 
+  mutate(perc = n/sum(n),
+         total = sum(n),
+         round = "rd1")
+
+exp4_tp_minus_unk_rd2_behaviors = exp4data %>%
+  filter(social_env_lag == "U", round > 1, time_pressure == "Minus") %>%
+  group_by(behavior) %>%
+  summarize(n = n()) %>%
+  ungroup() %>% 
+  mutate(perc = n/sum(n),
+         total = sum(n),
+         round = "later")
+
+exp4_tp_minus_unk_behaviors = bind_rows(exp4_tp_minus_unk_rd1_behaviors, exp4_tp_minus_unk_rd2_behaviors)
+
+## Cooperative environment - behaviors
+exp4_tp_minus_coop_behaviors = exp4data %>%
+  filter(social_env_lag == "C", round > 1, time_pressure == "Minus") %>%
+  group_by(behavior) %>%
+  summarize(n = n()) %>%
+  ungroup() %>% 
+  mutate(perc = n/sum(n),
+         total = sum(n),
+         environment = "Cooperative",
+         expt = "B, TP-")
+
+## Cooperative environment - times
+exp4_tp_minus_coop_times = exp4data %>%
+  filter(social_env_lag == "C", round > 1, time_pressure == "Minus", 
+         is.na(behavior) == F) %>%
+  group_by(behavior) %>%
+  summarize(mean_dt = mean1(behaviorTime_sec),
+            se_mean_dt = se_mean(behaviorTime_sec)) %>%
+  mutate(environment = "Cooperative")
+
+## Non-cooperative environment
+exp4_tp_minus_noncoop_behaviors = exp4data %>%
+  filter(social_env_lag == "NC", round > 1, time_pressure == "Minus") %>%
+  group_by(behavior) %>%
+  summarize(n = n()) %>%
+  ungroup() %>% 
+  mutate(perc = n/sum(n),
+         total = sum(n),
+         environment = "Non-cooperative",
+         expt = "B, TP-")
+
+## Non-coopearative environment - times
+exp4_tp_minus_noncoop_times = exp4data %>%
+  filter(social_env_lag == "NC", round > 1, time_pressure == "Minus", 
+         is.na(behavior) == F) %>%
+  group_by(behavior) %>%
+  summarize(mean_dt = mean1(behaviorTime_sec),
+            se_mean_dt = se_mean(behaviorTime_sec)) %>%
+  mutate(environment = "Non-cooperative")
+
+
+## Punisher in last round
+exp4_tp_minus_last_punished = exp4data %>%
+  filter(round > 1, time_pressure == "Minus", local_rate_punish_lag > 0)
+
+exp4_tp_minus_last_nopunish = exp4data %>%
+    filter(round > 1, time_pressure == "Minus", local_rate_punish_lag == 0)
+
+exp4_tp_minus_sum = bind_rows(exp4_tp_minus_coop_times, exp4_tp_minus_noncoop_times)
+exp4_tp_minus_behaviors_sum = bind_rows(exp4_tp_minus_coop_behaviors, exp4_tp_minus_noncoop_behaviors)
+
+```
+
+#### Hypothesis testing - proportions
+
+```{r}
+exp4_tp_minus_unk_behaviors
+prop.test(c(27, 69), c(367, 1127)) # p = 0.4745 in unknown
+
+exp4_tp_minus_coop_behaviors #74/1258
+
+exp4_tp_minus_noncoop_behaviors #171/2540
+
+prop.test(c(74, 171), c(1258, 2540)) # p = 0.35 in coop vs noncoop
+```
+
+### Experiment B, TP+ - Stratify by social environment
+
+```{r}
+## Unknown environment
+exp4_unk_env_rd1_behaviors = exp4data %>%
+  filter(social_env_lag == "U", round == 1, time_pressure == "Plus") %>%
+  group_by(behavior) %>%
+  summarize(n = n()) %>%
+  ungroup() %>% 
+  mutate(perc = n/sum(n),
+         total = sum(n),
+         round = "rd1")
+
+exp4_unk_env_rd2_behaviors = exp4data %>%
+  filter(social_env_lag == "U", round > 1, time_pressure == "Plus") %>%
+  group_by(behavior) %>%
+  summarize(n = n()) %>%
+  ungroup() %>% 
+  mutate(perc = n/sum(n),
+         total = sum(n),
+         round = "later")
+
+exp4_unk_behaviors_tp_plus = bind_rows(exp4_unk_env_rd1_behaviors, exp4_unk_env_rd2_behaviors)
+exp4_unk_behaviors_tp_plus
 ```
 
 ```{r}
-# Country breakdown - Experiment A
-data1_pc %>%
-  group_by(country_3cat) %>%
-  count() %>%
-  ungroup() %>%
-  mutate(proportion = n/sum(n))
+## Cooperative environment - behaviors
+exp4_coop_behaviors_tp_plus = exp4data %>%
+  filter(social_env_lag == "C", round > 1, time_pressure == "Plus") %>%
+  group_by(behavior) %>%
+  summarize(n = n()) %>%
+  ungroup() %>% 
+  mutate(perc = n/sum(n),
+         total = sum(n),
+         environment = "Cooperative",
+         expt = "B, TP+")
+
+## Cooperative environment - times
+exp4_coop_tp_plus_times = exp4data %>%
+  filter(social_env_lag == "C", round > 1, time_pressure == "Plus",
+         is.na(behavior) == F) %>%
+  group_by(behavior) %>%
+  summarize(mean_dt = mean1(behaviorTime_sec),
+            se_mean_dt = se_mean(behaviorTime_sec)) %>%
+  mutate(environment = "Cooperative")
+
+## Non-cooperative environment - behaviors
+exp4_noncoop_behaviors_tp_plus = exp4data %>%
+  filter(social_env_lag == "NC", round > 1, time_pressure == "Plus") %>%
+  group_by(behavior) %>%
+  summarize(n = n()) %>%
+  ungroup() %>% 
+  mutate(perc = n/sum(n),
+         total = sum(n),
+         environment = "Non-cooperative",
+         expt = "B, TP+")
+
+## Non-cooperative environmnet - times
+exp4_noncoop_tp_plus_times = exp4data %>%
+  filter(social_env_lag == "NC", round > 1, time_pressure == "Plus",
+         is.na(behavior) == F) %>%
+  group_by(behavior) %>%
+  summarize(mean_dt = mean1(behaviorTime_sec),
+            se_mean_dt = se_mean(behaviorTime_sec)) %>%
+  mutate(environment = "Non-cooperative")
+
+## Punish in last round
+exp4_tp_plus_last_punished = exp4data %>%
+  filter(round > 1, time_pressure == "Plus", local_rate_punish_lag > 0)
+
+exp4_tp_plus_last_nopunish = exp4data %>%
+    filter(round > 1, time_pressure == "Plus", local_rate_punish_lag == 0)
+
+exp4_tp_plus_sum = bind_rows(exp4_coop_tp_plus_times, exp4_noncoop_tp_plus_times)
+exp4_tp_plus_behavior_sum = bind_rows(exp4_coop_behaviors_tp_plus, exp4_noncoop_behaviors_tp_plus)
+```
+
+#### Hypothesis testing - proportions
+
+```{r}
+exp4_unk_behaviors
+prop.test(c(27, 82), c(372, 1118)) # p = 0.999
 ```
 
 ```{r}
-# Country breakdown - Experiment B
-exp4data %>%
-  group_by(country_3cat) %>%
-  count() %>%
-  ungroup() %>%
-  mutate(proportion = n/sum(n))
+exp4_coop_behaviors
+exp4_noncoop_behaviors
+prop.test(c(165, 64), c(2627, 1338)) # p = 0.065
 ```
+
+```{r}
+# Create the dataset for fig3
+
+
+```
+
+
 
 ### Network characteristics
 
@@ -183,7 +585,7 @@ exp4data %>%
             se_mean_payoff = se_mean(cumulativePayoff))
 ```
 
-## Behavior time
+## Decision time
 
 ```{r}
 # Times per behavior
@@ -250,15 +652,15 @@ exp4data_tp_plus_times = exp4data %>%
             se_mean_dt = se_mean(behaviorTime/1000))
 ```
 
-## Figure 1 - Behavior Frequencies and Decision Time, Experiment A
+## Figure 1
+
+### Behavior Frequencies and Decision Time, Experiment A
 
 ```{r}
 # Fig 1A
 exp1_fig1_data = bind_cols(data1_behavior_count, data1_behavior_CI, data1_times)[-7] 
 names(exp1_fig1_data) = c("behavior", "count", "crude_prop", "adjusted_prop", "LL", "UL",
                           "mean_dt", "recentered_mean_dt", "se_mean_dt")
-exp1_fig1_data = exp1_fig1_data %>%
-  mutate(behavior = ifelse(behavior == "P", "H", behavior))
 ```
 
 ```{r}
@@ -290,11 +692,11 @@ exp1_fig1_B = exp1_fig1_data %>%
   ggplot() +
   aes(x = behavior, y = recentered_mean_dt, fill = behavior) +
   geom_bar(stat = "identity", width = 0.75, alpha = 0.5) +
-  geom_errorbar(aes(ymin = recentered_mean_dt - se_mean_dt, 
-                    ymax = recentered_mean_dt + se_mean_dt, 
+  geom_errorbar(aes(ymin = recentered_mean_dt - 1.96*se_mean_dt, 
+                    ymax = recentered_mean_dt + 1.96*se_mean_dt, 
                     color = factor(behavior)), width = 0) +
   theme_classic() +
-  scale_y_continuous(limits = c(0, 6), breaks = seq(0, 6, by = 1), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(0, 8), breaks = seq(0, 8, by = 2), expand = c(0, 0)) +
   ylab("Decision time (seconds)")+
   facet_grid(~behavior, 
              scales = "free_x", # Let the x axis vary across facets.
@@ -315,21 +717,17 @@ exp1_fig1_B = exp1_fig1_data %>%
 exp1_fig1_A / exp1_fig1_B
 ```
 
-## Figure 1 - Behavior frequencies and Decision Time, Experiment B
+### Behavior Frequencies and Decision Time, Experiment B
 
 ```{r}
 exp4_tp_plus_fig1_data = bind_cols(exp4data_tp_plus_count, exp4data_tp_plus_CI, exp4data_tp_plus_times)[-7]
 names(exp4_tp_plus_fig1_data) = c("behavior", "count", "crude_prop", 
                                   "adjusted_prop", "LL", "UL", "mean_dt", 
                                   "se_mean_dt")
-exp4_tp_plus_fig1_data = exp4_tp_plus_fig1_data %>%
-  mutate(behavior = ifelse(behavior == "P", "H", behavior))
 
 exp4_tp_minus_fig1_data = bind_cols(exp4data_tp_minus_count, exp4data_tp_minus_CI, exp4_tp_minus_times)[-7]
 names(exp4_tp_minus_fig1_data) = c("behavior", "count", "prop", "adjusted_prop", 
                               "LL", "UL", "mean_dt", "se_mean_dt")
-exp4_tp_minus_fig1_data = exp4_tp_minus_fig1_data %>%
-  mutate(behavior = ifelse(behavior == "P", "H", behavior))
 ```
 
 ```{r}
@@ -355,15 +753,19 @@ exp4_fig1_A = exp4_tp_plus_fig1_data %>%
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
         axis.ticks.y = element_blank()) 
+exp4_fig1_A
+```
+
+```{r}
 exp4_fig1_B = exp4_tp_plus_fig1_data %>%
   ggplot() +
   aes(x = behavior, y = mean_dt, fill = behavior) +
   geom_bar(stat = "identity", width = 0.75, alpha = 0.5) +
-  geom_errorbar(aes(ymin = mean_dt - se_mean_dt, 
-                    ymax = mean_dt + se_mean_dt, 
+  geom_errorbar(aes(ymin = mean_dt - 1.96*se_mean_dt, 
+                    ymax = mean_dt + 1.96*se_mean_dt, 
                     color = factor(behavior)), width = 0) +
   theme_classic() +
-  scale_y_continuous(limits = c(0, 6), breaks = seq(0, 6, by = 2), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(0, 8), breaks = seq(0, 8, by = 2), expand = c(0, 0)) +
   ylab("Decision time (seconds)")+
   facet_grid(~behavior, 
              scales = "free_x", # Let the x axis vary across facets.
@@ -378,7 +780,10 @@ exp4_fig1_B = exp4_tp_plus_fig1_data %>%
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
         axis.ticks.y = element_blank())
-
+exp4_fig1_B
+```
+```{r}
+exp4_tp_minus_fig1_data
 exp4_fig1_C = exp4_tp_minus_fig1_data %>%
   ggplot() +
   aes(x = behavior, y = adjusted_prop, fill = behavior) +
@@ -401,6 +806,10 @@ exp4_fig1_C = exp4_tp_minus_fig1_data %>%
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
         axis.ticks.y = element_blank()) 
+exp4_fig1_C
+```
+
+```{r}
 exp4_fig1_D = exp4_tp_minus_fig1_data %>%
   ggplot() +
   aes(x = behavior, y = mean_dt, fill = behavior) +
@@ -409,7 +818,7 @@ exp4_fig1_D = exp4_tp_minus_fig1_data %>%
                     ymax = mean_dt + se_mean_dt, 
                     color = factor(behavior)), width = 0) +
   theme_classic() +
-  scale_y_continuous(limits = c(0, 6), breaks = seq(0, 6, by = 2), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(0, 8), breaks = seq(0, 8, by = 2), expand = c(0, 0)) +
   ylab("Decision time (seconds)")+
   facet_grid(~behavior, 
              scales = "free_x", # Let the x axis vary across facets.
@@ -424,32 +833,101 @@ exp4_fig1_D = exp4_tp_minus_fig1_data %>%
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
         axis.ticks.y = element_blank())
+
+exp4_fig1_D
 ```
 
 ```{r}
-(exp1_fig1_A / exp1_fig1_B) +
-  plot_annotation(title = "Behavior frequency and decision times, Experiment A",
-                  theme = theme(plot.title = element_text(size = 12)))
-
-ggsave(filename = "~/Documents/Projects/harming_esn/figures/fig1_top_v2.2.png", width = 8, height = 6, units = "in")
-
-(exp4_fig1_A + exp4_fig1_C) / (exp4_fig1_B + exp4_fig1_D) +
-  plot_annotation(title = "Behavior frequency and decision times, Experiment B, TP+ (left) and TP- (right)", theme = theme(plot.title = element_text(size = 12)))
-
-ggsave(filename = "~/Documents/Projects/harming_esn/figures/fig1_bottom_v2.2.png", width = 8, height = 6, units = "in")
+(exp1_fig1_A + exp4_fig1_A + exp4_fig1_C) / (exp1_fig1_B + exp4_fig1_B + exp4_fig1_D) +
+  plot_annotation(tag_levels = list(c("A", "B, TP+", "B, TP-", "", "", ""))) &
+  theme(plot.tag = element_text(size = 10))
+ggsave(filename = "~/Documents/Projects/harming_esn/figures/fig1.png", width = 6, height = 4, units = "in")
 ```
+
+## Figure 2 - Behavior frequencies by social environment, 3 experimental settings
+
+```{r}
+fig2data = bind_rows(exp1_behaviors_sum, exp4_tp_minus_behaviors_sum, exp4_tp_plus_behavior_sum) %>%
+  filter(is.na(behavior) == F) %>%
+  mutate(se_perc = sqrt((perc*(1-perc))/total))
+```
+
+```{r}
+fig2 = fig2data %>%
+  ggplot(aes(fill = behavior, y = perc, x = expt)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  geom_errorbar(aes(ymin = perc - 1.96*se_perc, 
+                    ymax = perc + 1.96*se_perc,
+                    color = factor(behavior),
+                    width = 0),
+                position = position_dodge(.9),
+                show.legend = F) +
+  facet_wrap(~environment) +
+  scale_fill_manual(values = c("cornflowerblue", "gold1", "plum"), 
+                    labels = c("Cooperation", "Defection", "Punishment"),
+                    name = "Behavior") +
+  scale_color_manual(values = c("dodgerblue4", "orange2", "#4B0082")) +
+  xlab("") +
+  ylab("Proportion") +
+  theme(legend.position = "bottom",
+        axis.ticks = element_blank()) +
+  theme_light()
+```
+
+## Figure 3 - Behavior frequencies and times by social environment, 3 experimental settings
+
+```{r}
+exp1_times_sum$expt = "A"
+exp4_tp_plus_sum$expt = "B, TP+"
+exp4_tp_minus_sum$expt = "B, TP-"
+fig3data = bind_rows(exp1_times_sum, exp4_tp_minus_sum, exp4_tp_plus_sum) 
+```
+
+```{r}
+fig3 = fig3data %>%
+  ggplot(aes(fill = behavior, y = mean_dt, x = expt)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  geom_errorbar(aes(ymin = mean_dt - 1.96*se_mean_dt, 
+                    ymax = mean_dt + 1.96*se_mean_dt,
+                    color = factor(behavior),
+                    width = 0),
+                position = position_dodge(.9),
+                show.legend = F) +
+  facet_wrap(~environment) +
+  scale_fill_manual(values = c("cornflowerblue", "gold1", "plum"), 
+                    labels = c("Cooperation", "Defection", "Punishment"),
+                    name = "Behavior") +
+  scale_color_manual(values = c("dodgerblue4", "orange2", "#4B0082")) +
+  ylab("Mean decision time (seconds)") +
+  xlab("") +
+  theme(legend.position = "none",
+        axis.ticks = element_blank()) +
+  theme_light()
+fig3
+```
+
+### Merge figs 2 and 3
+
+```{r}
+(fig2 / fig3) + plot_layout(guides = "collect") &
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        legend.key.size = unit(0.15, "in")) 
+
+ggsave(filename = "~/Documents/Projects/harming_esn/figures/fig2.png", width = 7, height = 7, units = "in")
+```
+
 
 # Regression modeling
-
-```{r}
-exp1_modeling = data1_pc %>% filter(round > 0)
-exp4_modeling = exp4data %>% filter(round > 0)
-```
 
 ## Harming as the outcome
 
 ```{r}
-m1 = glmer(behavior_punish ~ showScore + age + gender + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + local_rate_punish_lag + cPayoffS_lag + degree_lag +  + factor(round) + (1|game) + (1|superid), data = data1_modeling, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+data1_pc = data1_pc %>%
+  mutate(behaviorTime_sec_adj = behaviorTime_sec - 4.5,
+         logbehaviorTime_sec_adj = log10(behaviorTime_sec_adj))
+
+m1 = glmer(behavior_punish ~ showScore + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + local_rate_punish_lag + factor(round) + (1|game) + (1|superid), data = data1_pc %>% filter(round > 0), family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 
 tidy(m1, conf.int=TRUE, exponentiate=TRUE) %>%
   select(term, estimate, conf.low, conf.high, p.value) %>%
@@ -461,15 +939,16 @@ tidy(m1, conf.int=TRUE, exponentiate=TRUE) %>%
 ```
 
 ```{r}
-m2 = glmer(behavior_punish ~ time_pressure + factor(round) + (1|game) + (1|superid),  data = exp4_modeling, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+m2 = glmer(behavior_punish ~ time_pressure + round + (1|game) + (1|superid),  data = exp4data %>% filter(round > 0), family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
+
+summary(m2)
 
 tidy(m2, conf.int=TRUE, exponentiate=TRUE) %>%
   select(term, estimate, conf.low, conf.high, p.value) %>%
   rename(Term = term, Estimate = estimate, 
          LL = conf.low, UL = conf.high, p = p.value) %>%
-  mutate(across(where(is.numeric), round, 4)) %>%
   select(Term, Estimate, LL, UL, p) %>%
-  head(2) 
+  head(3) 
 ```
 
 ```{r}
@@ -500,9 +979,11 @@ tidy(m2.1, conf.int=TRUE, exponentiate=TRUE) %>%
 
 ## Behavior time as the outcome
 
-```{r}
-m4 = lmer(behaviorTime ~ previously_harmed + behavior + factor(round) + (1|game) + (1|superid),  data = exp1_modeling)
+## Exp A - All rounds
 
+```{r}
+m4 = lmer(behaviorTime_sec_adj ~ behavior + round + (1|game) + (1|superid), data = data1_pc)
+summary(m4)
 tidy(m4, conf.int=TRUE) %>%
   select(term, estimate, conf.low, conf.high, p.value) %>%
   rename(Term = term, Estimate = estimate, 
@@ -512,11 +993,44 @@ tidy(m4, conf.int=TRUE) %>%
   head(8) 
 ```
 
+## Exp B - controlling for time pressure
+
 ```{r}
+exp4_tp_plus = exp4data %>% filter(time_pressure == "Plus")
+exp4_tp_minus = exp4data %>% filter(time_pressure == "Minus")
 
-m5 = lmer(behaviorTime ~ previously_harmed + behavior + factor(round) + (1|game) + (1|superid),  data = exp4_modeling)
+m5a = lmer(behaviorTime_sec ~ behavior + round + (1|game) + (1|superid), data = exp4_tp_plus)
+summary(m5a)
+tidy(m5a, conf.int=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(8) 
+```
+```{r}
+m5b = lmer(behaviorTime_sec ~ behavior + round + (1|game) + (1|superid), data = exp4_tp_minus)
 
-tidy(m5, conf.int=TRUE) %>%
+summary(m5b)
+
+tidy(m5b, conf.int=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(8) 
+
+```
+
+## Exp A - Regression model for unknown environment 
+
+```{r}
+data1_unk_env = data1_pc %>% filter(social_env_lag == "U")
+
+m6 = lmer(logbehaviorTime_sec_adj ~ behavior + factor(round) + (1|game) + (1|superid), data = data1_unk_env)
+tidy(m6, conf.int=TRUE) %>%
   select(term, estimate, conf.low, conf.high, p.value) %>%
   rename(Term = term, Estimate = estimate, 
          LL = conf.low, UL = conf.high, p = p.value) %>%
@@ -525,16 +1039,246 @@ tidy(m5, conf.int=TRUE) %>%
   head(8) 
 ```
 
-## Payoff as the outcome
+## Exp B - regression model for unknown environment
 
-```{r, warning = F, message = F}
-m6 = lmer(cumulativePayoff ~ time_pressure + factor(round) + (1|game) + (1|superid), data = exp4_modeling)
+```{r}
+exp4data_unk_minus = exp4data %>% filter(social_env_lag == "U", time_pressure == "Minus")
 
-tidy(m6, conf.int=TRUE) %>%
+m7 = lmer(log10(behaviorTime_sec) ~ behavior + factor(round) + (1|game) + (1|superid), data = exp4data_unk_minus)
+tidy(m7, conf.int=TRUE) %>%
   select(term, estimate, conf.low, conf.high, p.value) %>%
   rename(Term = term, Estimate = estimate, 
          LL = conf.low, UL = conf.high, p = p.value) %>%
   mutate(across(where(is.numeric), round, 4)) %>%
   select(Term, Estimate, LL, UL, p) %>%
   head(8) 
+```
+
+```{r}
+m8 = lmer(behaviorTime_sec_adj ~ behavior + factor(round) + (1|game) + (1|superid), data = data1_punish_prev)
+tidy(m8, conf.int=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(8) 
+```
+
+## Exp A - Regression model for cooperative environment
+
+```{r}
+data1_coop_env = data1_pc %>% filter(social_env_lag == "C")
+
+m9 = lmer(behaviorTime_sec ~ behavior + round + (1|game) + (1|superid), data = data1_coop_env)
+summary(m9)
+tidy(m9, conf.int=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(8) 
+```
+
+## Exp B - Regression model for cooperative environment
+
+```{r}
+exp4data_coop_minus = exp4data %>% filter(social_env_lag == "C", time_pressure == "Minus")
+
+m10a = lmer(behaviorTime_sec ~ behavior + round + (1|game) + (1|superid), data = exp4data_coop_minus)
+
+summary(m10a)
+tidy(m10a, conf.int=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(8) 
+```
+
+##
+
+```{r}
+exp4data_coop_plus = exp4data %>% filter(social_env_lag == "C", time_pressure == "Plus")
+
+m10b = lmer(behaviorTime_sec ~ behavior + round + (1|game) + (1|superid), data = exp4data_coop_plus)
+
+summary(m10b)
+tidy(m10b, conf.int=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(8) 
+```
+
+## Exp A - Regression model for uncooperative environment
+
+```{r}
+data1_noncoop_env = data1_pc %>% filter(social_env_lag == "NC")
+
+m11 = lmer(behaviorTime_sec ~ behavior + round + (1|game) + (1|superid), data = data1_noncoop_env)
+
+summary(m11)
+tidy(m11, conf.int=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(8) 
+```
+
+## Exp B - Regression model for uncooperative environment
+
+```{r}
+exp4data_noncoop_minus = exp4data %>% filter(social_env_lag == "NC", time_pressure == "Minus")
+
+m12a = lmer(behaviorTime_sec ~ behavior + round + (1|game) + (1|superid), data = exp4data_noncoop_minus)
+summary(m12a)
+tidy(m12a, conf.int=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(8) 
+```
+
+```{r}
+exp4data_noncoop_plus = exp4data %>% filter(social_env_lag == "NC", time_pressure == "Plus")
+
+m12b = lmer(behaviorTime_sec ~ behavior + round + (1|game) + (1|superid), data = exp4data_noncoop_plus)
+summary(m12b)
+tidy(m12b, conf.int=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(8) 
+```
+## Exp A - Regression model with and without punishment in round t-1 
+
+```{r}
+m13 = lmer(behaviorTime_sec ~ behavior + round + (1|game) + (1|superid), data = exp1_last_punished)
+
+summary(m13)
+tidy(m13, conf.int=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(8) 
+```
+
+```{r}
+m14 = lmer(behaviorTime_sec ~ behavior + round + (1|game) + (1|superid), data = exp1_last_no_punish)
+summary(m14)
+tidy(m14, conf.int=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(8) 
+```
+
+## Exp B, TP-: Regression model with and without punishment
+
+```{r}
+m15 = lmer(behaviorTime_sec ~ behavior + round + (1|game) + (1|superid), data = exp4_tp_minus_last_punished)
+
+summary(m15)
+
+tidy(m15, conf.int=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(8) 
+```
+
+```{r}
+m16 = lmer(behaviorTime_sec ~ behavior + round + (1|game) + (1|superid), data = exp4_tp_minus_last_nopunish)
+summary(m16)
+tidy(m16, conf.int=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(8) 
+```
+
+## Exp B, TP+: model with and without punish in last round
+
+```{r}
+m17 = lmer(log10(behaviorTime_sec) ~ behavior + round + (1|game) + (1|superid), data = exp4_tp_plus_last_punished)
+
+summary(m17)
+tidy(m17, conf.int=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(8) 
+```
+
+```{r}
+m18 = lmer(log10(behaviorTime_sec) ~ behavior + round + (1|game) + (1|superid), data = exp4_tp_plus_last_nopunish)
+
+summary(m18)
+
+tidy(m18, conf.int=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(8) 
+```
+## Payoff as the outcome
+
+```{r, warning = F, message = F}
+m19 = lmer(cPayoffS ~ behavior + factor(round) + (1|game) + (1|superid), data = data1_pc)
+
+tidy(m19, conf.int=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(8) 
+```
+
+```{r}
+m20 = lmer(cPayoffS ~ behavior + factor(round) + (1|game) + (1|superid), data = exp4data %>% filter(time_pressure == "Minus"))
+
+tidy(m20, conf.int=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(8) 
+```
+
+```{r}
+m21 = lmer(cPayoffS ~ behavior + factor(round) + (1|game) + (1|superid), data = exp4data %>% filter(time_pressure == "Plus"))
+
+tidy(m21, conf.int=TRUE) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(Term = term, Estimate = estimate, 
+         LL = conf.low, UL = conf.high, p = p.value) %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  select(Term, Estimate, LL, UL, p) %>%
+  head(8) 
+```
 ```
