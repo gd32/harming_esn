@@ -45,6 +45,11 @@ data1_pc = data1_pc %>%
                        local_rate_defect_lag > 0.5 ~ "NC",
                                     local_rate_coop_lag > 0.5 ~ "C",
                                     TRUE ~ "U"))
+
+data1_pc = data1_pc %>%
+  mutate(behaviorTime_sec_adj = behaviorTime_sec - 4.5,
+         logbehaviorTime_sec_adj = log10(behaviorTime_sec_adj))
+
 # U is unknown environment
 exp4data = exp4data %>%
     mutate(social_env_lag = 
@@ -103,7 +108,15 @@ hist(data1_pc$local_rate_punish_lag,
 
 ```{r, message = F}
 # Players per game, min, max - Experiment A
+
 data1_pc %>%
+  filter(round >= 1) %>%
+  group_by(game) %>%
+  select(superid) %>%
+  unique()
+
+data1_pc %>%
+  filter(round >= 1) %>%
   group_by(game) %>%
   select(superid) %>%
   unique() %>%
@@ -141,6 +154,7 @@ exp4data %>%
 ```{r}
 # Behavior breakdown - Experiment A
 data1_behavior_count = data1_pc %>%
+  filter(round >= 1) %>%
   mutate(behavior = case_when(behavior_coop == 1 ~ "C",
                               behavior_defect == 1 ~ "D",
                               behavior_punish == 1 ~ "P")) %>%
@@ -153,7 +167,6 @@ data1_behavior_count = data1_pc %>%
 # Confidence Intervals 
 data1_behavior_CI = MultinomCI(x = c(4878, 4336, 652), sides = "two.sided") %>%
   as_tibble()
-data1_behavior_CI
 ```
 
 ```{r}
@@ -546,13 +559,10 @@ exp4_tp_plus_behavior_sum = bind_rows(exp4_coop_behaviors_tp_plus, exp4_noncoop_
 #### Hypothesis testing - proportions
 
 ```{r}
-exp4_unk_behaviors
 prop.test(c(27, 82), c(372, 1118)) # p = 0.999
 ```
 
 ```{r}
-exp4_coop_behaviors
-exp4_noncoop_behaviors
 prop.test(c(165, 64), c(2627, 1338)) # p = 0.065
 ```
 
@@ -821,9 +831,9 @@ exp4_fig1_D = exp4_tp_minus_fig1_data %>%
   scale_y_continuous(limits = c(0, 8), breaks = seq(0, 8, by = 2), expand = c(0, 0)) +
   ylab("Decision time (seconds)")+
   facet_grid(~behavior, 
-             scales = "free_x", # Let the x axis vary across facets.
-             space = "free_x",  # Let the width of facets vary and force all bars to have the same width.
-             switch = "x") +   # Move the facet labels to the bottom.
+             scales = "free_x", 
+             space = "free_x",  
+             switch = "x") +   
   scale_fill_manual(values = c("#00A5CF", "#FFBF00", "#574AE2")) +
   scale_color_manual(values = c("dodgerblue4", "darkorange3", "#574AE2")) +
   theme(panel.grid.minor = element_blank(),
@@ -838,40 +848,56 @@ exp4_fig1_D
 ```
 
 ```{r}
-(exp1_fig1_A + exp4_fig1_A + exp4_fig1_C) / (exp1_fig1_B + exp4_fig1_B + exp4_fig1_D) +
-  plot_annotation(tag_levels = list(c("A", "B, TP+", "B, TP-", "", "", ""))) &
+(exp1_fig1_A + exp4_fig1_C + exp4_fig1_A) / (exp1_fig1_B + exp4_fig1_D + exp4_fig1_B) +
+  plot_annotation(tag_levels = list(c("1", "2, TP-", "2, TP+", "", "", ""))) &
   theme(plot.tag = element_text(size = 10))
-ggsave(filename = "~/Documents/Projects/harming_esn/figures/fig1.png", width = 6, height = 4, units = "in")
+ggsave(filename = "~/Documents/Projects/harming_esn/figures/fig2.png", width = 7, height = 5, units = "in")
 ```
 
 ## Figure 2 - Behavior frequencies by social environment, 3 experimental settings
 
 ```{r}
+fig2data
 fig2data = bind_rows(exp1_behaviors_sum, exp4_tp_minus_behaviors_sum, exp4_tp_plus_behavior_sum) %>%
   filter(is.na(behavior) == F) %>%
-  mutate(se_perc = sqrt((perc*(1-perc))/total))
+  mutate(se_perc = sqrt((perc*(1-perc))/total),
+         environment = ifelse(environment == "Cooperative", "Cooperative environment",
+                              "Non-cooperative environment"),
+         expt = case_when(expt == "A" ~ "1",
+                          expt == "B, TP-" ~ "2, TP-",
+                          expt == "B, TP+" ~ "2, TP+"))
+         
 ```
 
 ```{r}
 fig2 = fig2data %>%
   ggplot(aes(fill = behavior, y = perc, x = expt)) +
-  geom_bar(position = "dodge", stat = "identity") +
+  geom_bar(position = "dodge", stat = "identity", alpha = 0.5) +
   geom_errorbar(aes(ymin = perc - 1.96*se_perc, 
                     ymax = perc + 1.96*se_perc,
                     color = factor(behavior),
                     width = 0),
                 position = position_dodge(.9),
                 show.legend = F) +
-  facet_wrap(~environment) +
-  scale_fill_manual(values = c("cornflowerblue", "gold1", "plum"), 
-                    labels = c("Cooperation", "Defection", "Punishment"),
-                    name = "Behavior") +
-  scale_color_manual(values = c("dodgerblue4", "orange2", "#4B0082")) +
+  facet_wrap(~environment,
+             scales = "free_x") +
+  scale_fill_manual(values = c("#00A5CF", "#FFBF00", "#574AE2"),
+                    labels = c("Cooperation", "Defection", "Punishment")) +
+  scale_color_manual(values = c("dodgerblue4", "darkorange3", "#574AE2")) +
+  scale_y_continuous(limits = c(0, 0.8), expand = c(0, 0)) +
   xlab("") +
   ylab("Proportion") +
-  theme(legend.position = "bottom",
-        axis.ticks = element_blank()) +
-  theme_light()
+  theme_classic() +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        legend.position = "bottom",
+        legend.title = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank())
+
+
+fig2
 ```
 
 ## Figure 3 - Behavior frequencies and times by social environment, 3 experimental settings
@@ -880,13 +906,19 @@ fig2 = fig2data %>%
 exp1_times_sum$expt = "A"
 exp4_tp_plus_sum$expt = "B, TP+"
 exp4_tp_minus_sum$expt = "B, TP-"
-fig3data = bind_rows(exp1_times_sum, exp4_tp_minus_sum, exp4_tp_plus_sum) 
+fig3data = bind_rows(exp1_times_sum, exp4_tp_minus_sum, exp4_tp_plus_sum) %>%
+  mutate(environment = ifelse(environment == "Cooperative", "Cooperative environment",
+                              "Non-cooperative environment"),
+                  expt = case_when(expt == "A" ~ "1",
+                          expt == "B, TP-" ~ "2, TP-",
+                          expt == "B, TP+" ~ "2, TP+"))
+         
 ```
 
 ```{r}
 fig3 = fig3data %>%
   ggplot(aes(fill = behavior, y = mean_dt, x = expt)) +
-  geom_bar(position = "dodge", stat = "identity") +
+  geom_bar(position = "dodge", stat = "identity", alpha = 0.5, show.legend = F) +
   geom_errorbar(aes(ymin = mean_dt - 1.96*se_mean_dt, 
                     ymax = mean_dt + 1.96*se_mean_dt,
                     color = factor(behavior),
@@ -894,15 +926,20 @@ fig3 = fig3data %>%
                 position = position_dodge(.9),
                 show.legend = F) +
   facet_wrap(~environment) +
-  scale_fill_manual(values = c("cornflowerblue", "gold1", "plum"), 
-                    labels = c("Cooperation", "Defection", "Punishment"),
-                    name = "Behavior") +
-  scale_color_manual(values = c("dodgerblue4", "orange2", "#4B0082")) +
+  scale_fill_manual(values = c("#00A5CF", "#FFBF00", "#574AE2"),
+                    labels = c("Cooperation", "Defection", "Punishment"))+
+  scale_color_manual(values = c("dodgerblue4", "darkorange3", "#574AE2")) +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 8)) +
   ylab("Mean decision time (seconds)") +
   xlab("") +
-  theme(legend.position = "none",
-        axis.ticks = element_blank()) +
-  theme_light()
+  theme_classic() +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        legend.title = element_blank(),
+        legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank()) 
 fig3
 ```
 
@@ -914,7 +951,7 @@ fig3
         legend.title = element_blank(),
         legend.key.size = unit(0.15, "in")) 
 
-ggsave(filename = "~/Documents/Projects/harming_esn/figures/fig2.png", width = 7, height = 7, units = "in")
+ggsave(filename = "~/Documents/Projects/harming_esn/figures/fig3.png", width = 7, height = 7, units = "in")
 ```
 
 
@@ -923,10 +960,6 @@ ggsave(filename = "~/Documents/Projects/harming_esn/figures/fig2.png", width = 7
 ## Harming as the outcome
 
 ```{r}
-data1_pc = data1_pc %>%
-  mutate(behaviorTime_sec_adj = behaviorTime_sec - 4.5,
-         logbehaviorTime_sec_adj = log10(behaviorTime_sec_adj))
-
 m1 = glmer(behavior_punish ~ showScore + behavior_coop_lag + local_rate_coop_lag + behavior_punish_lag + local_rate_punish_lag + factor(round) + (1|game) + (1|superid), data = data1_pc %>% filter(round > 0), family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 
 tidy(m1, conf.int=TRUE, exponentiate=TRUE) %>%
