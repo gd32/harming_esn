@@ -1,3 +1,6 @@
+### Purpose: converts raw node and link data into decision-level dataset
+
+
 rm(list = ls())
 setwd("~/Documents/Projects/harming_esn/Data/harming_jsons")
 load(file="node_1aX.Rdata") #ndata

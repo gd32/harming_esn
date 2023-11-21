@@ -114,14 +114,7 @@ ldata = data3_combined #link data
 
 
 save(ndata,file="~/Documents/Projects/harming_esn/data/exp4/node_1aX_exp4.Rdata") 
-save(ldata,file="~/Documents/Projects/harming_esn/data/exp4/link_1aX_exp4.Rdata") 
-
-
-ndata %>% filter(game == 44, round == 0) %>% pull(id)
-ndata %>% filter(game == 44, round == 1) %>% pull(id)
-ndata %>% filter(game == 44, round == 2) %>% pull(id)
-ndata %>% filter(game == 44, round == 8) %>% pull(id)
-ndata %>% filter(game == 44, round == 15) %>% pull(id)
+save(ldata,file="~/Documents/Projects/harming_esn/data/exp4/link_1aX_exp4.Rdata")
 
 
 #estbalish happ_coop

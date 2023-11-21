@@ -1,11 +1,12 @@
 rm(list = ls())
-setwd("~/Documents/Projects/harming_esn/Data/exp4/")
+setwd("~/Documents/Projects/harming_esn/Data/exp4/exp4_subdata/")
 
 load(file="node_exp4.Rdata") #ndata
 load(file="link_exp4.Rdata") #ldata
 
 library(reldist)
 library(tidyverse)
+library(rgeolocate)
 
 # Set up functions
 rank1 = function(x) {rank(x,na.last=NA,ties.method="average")[1]} 
@@ -65,8 +66,8 @@ save(ldata4,file="ldata_exp4.Rdata")
 
 ###############################################################################
 # Start here for creating new variables
-load("~/Documents/Projects/harming_esn/Data/exp4/ldata_exp4.Rdata") #ldata
-load("~/Documents/Projects/harming_esn/Data/exp4/node_exp4.Rdata") #ndata
+load("~/Documents/Projects/harming_esn/Data/exp4/exp4_subdata/ldata_exp4.Rdata") #ldata
+load("~/Documents/Projects/harming_esn/Data/exp4/exp4_subdata/node_exp4.Rdata") #ndata
 
 # Adjust behavior
 ndata = ndata %>% mutate(behavior = ifelse(ndata$behavior == "", NA, ndata$behavior))
@@ -78,13 +79,6 @@ ndata$behavior_punish = ifelse(is.na(ndata$behavior)==0 & ndata$behavior == "P",
 
 #behaviorTime as numeric
 ndata$behaviorTime = as.numeric(ndata$behaviorTime)
-
-# What scale is satisfaction on ?
-table(unlist(ndata$rewiringSatisfaction)) # just a likert scale? 1 - very bad -> 5 very good
-
-# Other demographics? can get is_hispanic, race, ipAddress
-table(unlist(ndata$is_hispanic)) # All missing - or could be no hispanic? Regardless, don't use
-table(unlist(ndata$race)) #All missing
 
 ipList = unique(unlist(ndata$ipAddress)) # Have these
 library(rgeolocate)
@@ -106,7 +100,7 @@ ndata1 = merge(x=ndata,y=ldata6,all.x=TRUE,all.y=FALSE,
                by.y=c("round","gameID","game","scoreA","scoreB","percentA","showScore","id1"))
 
 save(ndata1, file = "ndata1_exp4.Rdata") #This is used for the individual-level analysis. 
-load("~/Documents/Projects/harming_esn/data/exp4/ndata1_exp4.Rdata") #ndata1 
+load("~/Documents/Projects/harming_esn/data/exp4/exp4_subdata/ndata1_exp4.Rdata") #ndata1 
 
 dim(ndata1[ndata1$round==0,]) # 739 individuals
 dim(ndata1[ndata1$round!=0,]) # 10747 actions
@@ -261,7 +255,7 @@ outcome_network_a16 = merge(x=outcome_network_a15,y=a16_data,all.x=TRUE,all.y=FA
 
 mdata1 = outcome_network_a16
 mdata1 = as.matrix(mdata1)
-# write.csv(mdata1, "mdata1_0316X.csv", quote=FALSE, row.names=FALSE) 
+# write.csv(mdata1, "mdata1_0316X.csv", quote=FALSE, row.names=FALSE)
 
 outcome_network_c1 = merge(x=outcome_network_a16,y=c1_data,all.x=TRUE,all.y=FALSE,by.x=c("gameID","game","round","superid2.1"),by.y=c("gameID","game","currentround","c1_superid"))
 outcome_network_c2 = merge(x=outcome_network_c1,y=c2_data,all.x=TRUE,all.y=FALSE,by.x=c("gameID","game","round","superid2.2"),by.y=c("gameID","game","currentround","c2_superid"))
@@ -366,3 +360,76 @@ mdata3 = merge(x=mdata2,y=initial_data2,all.x=TRUE,all.y=FALSE,by="superid")
 
 save(mdata3, file= "exp4_mdata3.Rdata")
 
+## Load from here to create new punish variables - need to create three:
+## 1. negative reinforcement (punish when cooperation is low to foster more)
+## 2. inequality aversion (punish when below average wealth in the local network)
+## 3. copy/retaliation (punish when punishment is experienced)
+
+load("~/Documents/Projects/harming_esn/data/exp4/exp4_subdata/ndata1_exp4.Rdata") #ndata1 
+load("~/Documents/Projects/harming_esn/data/exp4/exp4data.Rdata") #exp4data
+
+ndata_alters_list = ndata1 %>% 
+  select(round, game, starts_with("id")) %>%
+  filter(round != 0) %>%
+  mutate(across(starts_with("id"), ~100*game+parse_number(.))) %>%
+  rename(superid = id)
+
+names(ndata_alters_list)[4:19] = c("alter1", "alter2", "alter3", "alter4", 
+                                   "alter5", "alter6", "alter7", "alter8",
+                                   "alter9", "alter10", "alter11", "alter12",
+                                   "alter13", "alter14", "alter15", "alter16")
+
+current_wealth = exp4data %>% 
+  filter(round != 0) %>%
+  select(superid, game, round, cumulativePayoff, cPayoffS)
+
+ndata_long_alters = ndata_alters_list %>%
+  pivot_longer(cols = starts_with("alter"), values_to = ("alter_id")) %>%
+  filter(is.na(alter_id) == 0)
+
+ndata_long_alters_wealth = ndata_long_alters %>%
+  left_join(current_wealth, by = c("round", "game", "alter_id" = "superid")) %>%
+  group_by(superid, round, game) %>%
+  summarize(mean_alter_wealth = mean1(cPayoffS))
+
+ndata_long_alters_wealth
+
+exp4data %>%
+  left_join(ndata_long_alters_wealth, by = c("round", "game", "superid")) %>%
+  mutate(wealth_inequal = ifelse(cPayoffS < mean_alter_wealth, 1, 0)) 
+
+data_lag = exp4data %>% dplyr::select(superid, round, wealth_inequal)
+names(data_lag)[-c(1,2)] = paste0(names(data_lag)[-c(1,2)],"_lag")
+data_lag$round = data_lag$round + 1
+exp4data = merge(x=exp4data,y=data_lag, all.x=T,all.y=F,by=c("superid","round"))
+
+
+## Create the three punish variables
+load("~/Documents/Projects/harming_esn/data/exp4/exp4data.Rdata")
+load("~/Documents/Projects/harming_esn/data/exp1/data1_pc_v2.Rdata")
+
+data_lag = data1_pc %>% dplyr::select(superid, round, wealth_inequal)
+names(data_lag)[-c(1,2)] = paste0(names(data_lag)[-c(1,2)],"_lag")
+data_lag$round = data_lag$round + 1
+data1_pc = merge(x=data1_pc,y=data_lag, all.x=T,all.y=F,by=c("superid","round"))
+
+
+data1_pc = data1_pc %>%
+  mutate(punish_type_NR = ifelse(behavior_punish == 1 & local_rate_coop_lag < 0.5, 1, 0),
+         punish_type_CR = ifelse(behavior_punish == 1 & local_rate_punish_lag > 0, 1, 0),
+         punish_type_IA = ifelse(behavior_punish == 1 & wealth_inequal_lag == 1, 1, 0),
+         punish_type_U = ifelse(behavior_punish == 1 & punish_type_CR == 0 & punish_type_NR == 0 & punish_type_IA == 0 | behavior_punish == 1 & (is.na(punish_type_NR) == 1 & is.na(punish_type_IA) == 1 & is.na(punish_type_CR) == 1), 1, 0))
+
+exp4data = exp4data %>%
+  mutate(punish_type_NR = ifelse(behavior_punish == 1 & local_rate_coop_lag < 0.5, 1, 0),
+         punish_type_CR = ifelse(behavior_punish == 1 & local_rate_punish_lag > 0, 1, 0),
+         punish_type_IA = ifelse(behavior_punish == 1 & wealth_inequal_lag == 1, 1, 0),
+         punish_type_U = ifelse(behavior_punish == 1 & punish_type_CR == 0 & punish_type_NR == 0 & punish_type_IA == 0 | behavior_punish == 1 & (is.na(punish_type_NR) == 1 & is.na(punish_type_IA) == 1 & is.na(punish_type_CR) == 1), 1, 0))
+
+exp1data = data1_pc
+
+## Do this for experiment 1 too
+
+## Save the updated data
+save(exp1data, file = "~/Documents/Projects/harming_esn/data/exp1/exp1data.Rdata")
+save(exp4data, file = "~/Documents/Projects/harming_esn/data/exp4/exp4data.Rdata")
