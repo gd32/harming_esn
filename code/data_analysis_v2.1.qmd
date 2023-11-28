@@ -271,6 +271,7 @@ exp1data %>%
   ggplot() +
   geom_line(aes(x = round, y = mean_score, color = as.factor(initial_score), linetype = as.factor(initial_behavior)))
 ```
+
 ```{r}
 exp4data %>%
   mutate(initial_behavior = case_when(initial_coop == 1 ~ "C",
@@ -1200,9 +1201,8 @@ exp4data_times %>%
         axis.ticks.y = element_blank()) 
 ```
 
-
-
 ### Main
+
 ```{r}
 # Create the combined figure
 exp4data_combined %>%
@@ -1338,6 +1338,7 @@ figS1data %>%
 ```
 
 #### Figure
+
 ```{r}
 fig_S1_A = figS1data %>%
   ggplot(aes(x = punish_type, y = perc)) +
@@ -1361,6 +1362,7 @@ fig_S1_A = figS1data %>%
         axis.ticks.x = element_blank(),
         axis.ticks.y = element_blank()) 
 ```
+
 ```{r}
 fig_S1_B = exp1data_punish_types_times %>%
   ggplot() +
@@ -1385,7 +1387,6 @@ fig_S1_A / fig_S1_B + plot_annotation(tag_levels = c("A", "B"))
 
 ggsave(filename = "~/Documents/Projects/harming_esn/figures/figS1.png", width = 7, height = 5, units = "in")
 ```
-
 
 ## Supplementary Figure - Figure S2, stratified by previous punish status
 
@@ -1519,6 +1520,7 @@ fig4_tp_Plus_data_pp = bind_rows(fig4_tp_Plus_CR_pp,
 
 fig4data_combined_pp = bind_rows(fig4_tp_minus_data_pp, fig4_tp_Plus_data_pp)
 ```
+
 ```{r}
 # Run the regression models for each condition to test the effect of time pressure to get p-values
 fig4_model_NR = glmer(punish_type_NR ~ time_pressure + factor(round) + (1|game) + (1|superid), data = fig4data_prev_punish, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
@@ -1530,6 +1532,7 @@ tidy(fig4_model_NR, conf.int=TRUE, exponentiate=TRUE) %>%
   select(Term, Estimate, LL, UL, p) %>%
   head(10) # p = 0.9884
 ```
+
 ```{r}
 fig4_model_CR = glmer(punish_type_CR ~ time_pressure + factor(round) + (1|game) + (1|superid), data = fig4data_prev_punish, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 tidy(fig4_model_CR, conf.int=TRUE, exponentiate=TRUE) %>%
@@ -1540,6 +1543,7 @@ tidy(fig4_model_CR, conf.int=TRUE, exponentiate=TRUE) %>%
   select(Term, Estimate, LL, UL, p) %>%
   head(10) # p = 0.253
 ```
+
 ```{r}
 fig4_model_IA = glmer(punish_type_IA ~ time_pressure + factor(round) + (1|game) + (1|superid), data = fig4data_prev_punish, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 tidy(fig4_model_IA, conf.int=TRUE, exponentiate=TRUE) %>%
@@ -1550,6 +1554,7 @@ tidy(fig4_model_IA, conf.int=TRUE, exponentiate=TRUE) %>%
   select(Term, Estimate, LL, UL, p) %>%
   head(10) # p = 0.919
 ```
+
 ```{r}
 fig4_model_U = glmer(punish_type_U ~ time_pressure + factor(round) + (1|game) + (1|superid), data = fig4data, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 tidy(fig4_model_U, conf.int=TRUE, exponentiate=TRUE) %>%
@@ -1562,6 +1567,7 @@ tidy(fig4_model_U, conf.int=TRUE, exponentiate=TRUE) %>%
 ```
 
 ### Figure - previous punish
+
 ```{r}
 fig4_pp = fig4data_combined_pp %>%
   ggplot(aes(x = punish_type, y = perc, fill = setting)) +
@@ -1711,6 +1717,7 @@ fig4_tp_Plus_data_np = bind_rows(fig4_tp_Plus_CR_np,
 
 fig4data_combined_np = bind_rows(fig4_tp_minus_data_np, fig4_tp_Plus_data_np)
 ```
+
 ```{r}
 fig4_model_NR = glmer(punish_type_NR ~ time_pressure + factor(round) + (1|game) + (1|superid), data = fig4data_prev_no_punish, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 tidy(fig4_model_NR, conf.int=TRUE, exponentiate=TRUE) %>%
@@ -1721,6 +1728,7 @@ tidy(fig4_model_NR, conf.int=TRUE, exponentiate=TRUE) %>%
   select(Term, Estimate, LL, UL, p) %>%
   head(10) # p = 0.5923
 ```
+
 ```{r}
 fig4_model_CR = glmer(punish_type_CR ~ time_pressure + factor(round) + (1|game) + (1|superid), data = fig4data_prev_no_punish, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 tidy(fig4_model_CR, conf.int=TRUE, exponentiate=TRUE) %>%
@@ -1731,6 +1739,7 @@ tidy(fig4_model_CR, conf.int=TRUE, exponentiate=TRUE) %>%
   select(Term, Estimate, LL, UL, p) %>%
   head(10) # p = 0.534
 ```
+
 ```{r}
 fig4_model_IA = glmer(punish_type_IA ~ time_pressure + factor(round) + (1|game) + (1|superid), data = fig4data_prev_no_punish, family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 tidy(fig4_model_IA, conf.int=TRUE, exponentiate=TRUE) %>%
@@ -1741,6 +1750,7 @@ tidy(fig4_model_IA, conf.int=TRUE, exponentiate=TRUE) %>%
   select(Term, Estimate, LL, UL, p) %>%
   head(10) # p = 0.820
 ```
+
 ```{r}
 fig4_model_U = glmer(punish_type_U ~ time_pressure + factor(round) + (1|game) + (1|superid), data = fig4data_prev_no_punish , family = binomial, nAGQ=0, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e5), calc.derivs=FALSE))
 tidy(fig4_model_U, conf.int=TRUE, exponentiate=TRUE) %>%
@@ -1751,6 +1761,7 @@ tidy(fig4_model_U, conf.int=TRUE, exponentiate=TRUE) %>%
   select(Term, Estimate, LL, UL, p) %>%
   head(10) # p = 1
 ```
+
 ### Figure - no previous punish
 
 ```{r}
@@ -1795,7 +1806,6 @@ fig4_pp / fig4_np +
         legend.title = element_blank(),
         legend.key.size = unit(0.15, "in")) 
 ```
-
 
 ## Manuscript Figure 5 - Behavior frequencies, Experiment 1
 
@@ -2151,7 +2161,7 @@ tidy(m9_0.4, conf.int=TRUE) %>%
   head(8) 
 ```
 
-#### Threshold = 0.6 
+#### Threshold = 0.6
 
 ```{r}
 data1_coop_env_0.6 = exp1data %>% filter(social_env_lag0.6 == "C")
@@ -2316,6 +2326,7 @@ m10b_0.4 = lmer(behaviorTime_sec ~ behavior + round + (1|game) + (1|superid), da
 
 summary(m10b_0.4)
 ```
+
 #### Threshold = 0.6
 
 ```{r}
@@ -2325,6 +2336,7 @@ m10b_0.6 = lmer(behaviorTime_sec ~ behavior + round + (1|game) + (1|superid), da
 
 summary(m10b_0.6)
 ```
+
 #### Threshold = 0.7
 
 ```{r}
@@ -2334,6 +2346,7 @@ m10b_0.7 = lmer(behaviorTime_sec ~ behavior + round + (1|game) + (1|superid), da
 
 summary(m10b_0.7)
 ```
+
 #### Threshold = 0.8
 
 ```{r}
@@ -2343,6 +2356,7 @@ m10b_0.8 = lmer(behaviorTime_sec ~ behavior + round + (1|game) + (1|superid), da
 
 summary(m10b_0.8)
 ```
+
 #### Threshold = 0.9
 
 ```{r}
@@ -2398,6 +2412,7 @@ data1_noncoop_env_0.7 = exp1data %>% filter(social_env_lag0.7 == "NC")
 m11_0.7 = lmer(behaviorTime_sec ~ behavior + round + (1|game) + (1|superid), data = data1_noncoop_env_0.7)
 summary(m11_0.7)
 ```
+
 #### Threshold = 0.8
 
 ```{r}
@@ -2477,6 +2492,7 @@ m12a_0.7 = lmer(behaviorTime_sec ~ behavior + round + (1|game) + (1|superid), da
 
 summary(m12a_0.7)
 ```
+
 #### Threshold = 0.8
 
 ```{r}
@@ -2486,6 +2502,7 @@ m12a_0.8 = lmer(behaviorTime_sec ~ behavior + round + (1|game) + (1|superid), da
 
 summary(m12a_0.8)
 ```
+
 #### Threshold = 0.9
 
 ```{r}
@@ -2507,6 +2524,7 @@ m12a_0.4 = lmer(behaviorTime_sec ~ behavior + round + (1|game) + (1|superid), da
 
 summary(m12a_0.4)
 ```
+
 #### Threshold = 0.6
 
 ```{r}
@@ -2516,6 +2534,7 @@ m12a_0.6 = lmer(behaviorTime_sec ~ behavior + round + (1|game) + (1|superid), da
 
 summary(m12a_0.6)
 ```
+
 #### Threshold = 0.7
 
 ```{r}
@@ -2525,6 +2544,7 @@ m12a_0.7 = lmer(behaviorTime_sec ~ behavior + round + (1|game) + (1|superid), da
 
 summary(m12a_0.7)
 ```
+
 #### Threshold = 0.8
 
 ```{r}
@@ -2545,8 +2565,6 @@ m12a_0.9 = lmer(behaviorTime_sec ~ behavior + round + (1|game) + (1|superid), da
 summary(m12a_0.9)
 ```
 
-
-
 # Exp A - Regression model with and without punishment in round t-1
 
 ```{r}
@@ -2561,6 +2579,7 @@ tidy(m13, conf.int=TRUE) %>%
   select(Term, Estimate, LL, UL, p) %>%
   head(8) 
 ```
+
 ## Punish Decision Time with last punish vs. not
 
 ```{r}
@@ -2578,7 +2597,6 @@ tidy(m13, conf.int=TRUE) %>%
   select(Term, Estimate, LL, UL, p) %>%
   head(2) 
 ```
-
 
 ```{r}
 m14 = lmer(behaviorTime_sec ~ behavior + round + (1|game) + (1|superid), data = exp1_last_no_punish)
