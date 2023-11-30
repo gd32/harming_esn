@@ -101,10 +101,19 @@ exp4data %>%
             `Min Players` = min(n),
             `Max Players` = max(n))
 ```
+```{r}
+exp4data %>%
+  filter(time_pressure == "Plus", round > 0, behavior %in% c("C", "D", "P")) %>%
+  nrow()
+```
 
 ### Rate of timeout in Exp B, TP+
 
 ```{r}
+exp4data %>%
+  filter(time_pressure == "Plus", round > 0) %>%
+  nrow() 
+
 exp4data %>%
   filter(time_pressure == "Plus", round > 0) %>%
   select(superid, game, round, behavior, timeout, behaviorTime_sec)
@@ -932,6 +941,9 @@ m2 = glmer(behavior_punish ~ time_pressure + round + (1|game) + (1|superid),  da
 
 summary(m2)
 
+exp4data %>% filter(round > 0, is.na(behavior) == F) %>%
+  nrow()
+
 tidy(m2, conf.int=TRUE, exponentiate=TRUE) %>%
   select(term, estimate, conf.low, conf.high, p.value) %>%
   rename(Term = term, Estimate = estimate, 
@@ -1116,7 +1128,7 @@ summary(m4_3)
 exp4_tp_plus = exp4data %>% filter(time_pressure == "Plus")
 exp4_tp_minus = exp4data %>% filter(time_pressure == "Minus")
 
-m5a = lmer(behaviorTime_sec ~ behavior + round + (1|game) + (1|superid), data = exp4_tp_plus)
+m5a = lmer(behaviorTime_sec ~ behavior + round + (1|game) + (1|superid), data = exp4_tp_plus %>% filter(round > 0))
 summary(m5a)
 tidy(m5a, conf.int=TRUE) %>%
   select(term, estimate, conf.low, conf.high, p.value) %>%
@@ -1128,7 +1140,7 @@ tidy(m5a, conf.int=TRUE) %>%
 ```
 
 ```{r}
-m5b = lmer(behaviorTime_sec ~ behavior + round + (1|game) + (1|superid), data = exp4_tp_minus)
+m5b = lmer(behaviorTime_sec ~ behavior + round + (1|game) + (1|superid), data = exp4_tp_minus %>% filter(round > 0))
 
 summary(m5b)
 
