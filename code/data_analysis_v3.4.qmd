@@ -1,0 +1,1100 @@
+---
+title: "Data Analysis for 'Punishment is Slower than Cooperation or Defection'"
+format: 
+  pdf:
+    toc: true
+editor: visual
+---
+
+# 1. Setup
+
+## Load required packages
+
+```{r, message = F, warning = F}
+library(tidyverse)
+library(igraph)
+library(lme4)
+library(lmerTest)
+library(DescTools)
+library(data.table)
+library(patchwork)
+library(stringr)
+library(ggpattern)
+```
+
+## Load required data
+
+```{r}
+## Experiment 1
+exp1data = read_csv("~/Documents/Projects/harming_esn/data/final/exp1data_final.csv",
+                    show_col_types = FALSE)
+
+## Experiment 2
+exp2data = read_csv("~/Documents/Projects/harming_esn/data/final/exp2data_final.csv", 
+                    show_col_types = FALSE)
+```
+
+## Create helper functions
+
+```{r}
+mean1 = function(x) {mean(x,na.rm=TRUE)}
+median1 = function(x) {median(x, na.rm = TRUE)}
+sd1 = function(x) {sd(x, na.rm = TRUE)}
+se_mean = function(x) sd1(x)/sqrt(sum(is.na(x) == 0))
+```
+
+# 2. Analysis
+
+### Number of observations per experiment
+
+#### Experiment 1
+
+```{r}
+# Experiment 1
+exp1data %>%
+  filter(round > 0, is.na(behavior) == F) %>%
+  nrow()
+```
+
+#### Experiment 2
+
+```{r}
+# Experiment 2
+exp2data %>%
+  filter(round > 0, is.na(behavior) == F) %>%
+  nrow()
+```
+
+### Per-game characteristics
+
+#### Experiment 1
+
+```{r, message = F}
+exp1data %>%
+  filter(round >= 1) %>%
+  group_by(game) %>%
+  select(superid) %>%
+  unique() %>%
+  nrow()
+
+exp1data %>%
+  filter(round >= 1) %>%
+  group_by(game) %>%
+  select(superid) %>%
+  unique() %>%
+  summarize(n = n()) %>%
+  summarize(`Mean Players` = mean(n),
+            `Min Players` = min(n),
+            `Max Players` = max(n))
+```
+
+#### Experiment 2
+
+```{r, message = F}
+# Players per game, min, max - Experiment 2
+exp2data %>%
+  filter(round >=0) %>% 
+  group_by(game) %>%
+  select(superid) %>%
+  unique() %>%
+  summarize(n = n()) %>%
+  summarize(`Mean Players` = mean(n),
+            `Min Players` = min(n),
+            `Max Players` = max(n))
+```
+
+#### Number of observations in Exp. 2, TP+/TP- settings
+
+```{r}
+exp2data %>%
+  filter(time_pressure == "Plus", round >= 1, behavior %in% c("C", "D", "P")) %>%
+  nrow()
+
+exp2data %>%
+  filter(time_pressure == "Minus", round >= 1, behavior %in% c("C", "D", "P")) %>%
+  nrow()
+
+# Total = 10654
+```
+
+### Distribution of decision-making
+
+#### Experiment 1
+
+```{r}
+# Decision distribution - Experiment 1
+data1_behavior_count = exp1data %>%
+  filter(round >= 1) %>%
+  group_by(behavior) %>%
+  filter(behavior %in% c("C", "D", "P")) %>%
+  summarize(count = n()) %>%
+  ungroup() %>%
+  mutate(proportion = count/sum(count))
+
+# Confidence Intervals 
+data1_behavior_CI = MultinomCI(x = c(4878, 4336, 562), sides = "two.sided") %>%
+  as_tibble()
+```
+
+#### Experiment 2
+
+```{r}
+# Decision distribution - Experiment 2
+exp2data_count = exp2data %>% filter(round >= 1) %>%
+  group_by(behavior) %>%
+  filter(behavior %in% c("C", "D", "P")) %>%
+  summarize(count = n()) %>%
+  ungroup() %>%
+  mutate(proportion = count/sum(count))
+
+exp2data_all_CI = MultinomCI(c(4185, 5790, 679), sides = "two.sided")
+```
+
+```{r}
+exp2data_tp_plus_count = exp2data %>%
+  group_by(behavior) %>%
+  filter(time_pressure == "Plus", behavior %in% c("C", "D", "P")) %>%
+  summarize(count = n()) %>%
+  ungroup() %>%
+  mutate(proportion = count/sum(count))
+
+exp2data_tp_plus_CI = MultinomCI(c(2172, 2897, 338), sides = "two.sided")
+
+exp2data_tp_plus_times = exp2data %>%
+  group_by(behavior) %>%
+  filter(time_pressure == "Plus", behavior %in% c("C", "D", "P")) %>%
+  summarize(mean_dt = mean1(behaviorTime_sec),
+            se_mean_dt = se_mean(behaviorTime_sec),
+            LL_mean = mean_dt - 1.96*se_mean_dt,
+            UL_mean = mean_dt + 1.96*se_mean_dt)
+
+exp2data_tp_minus_count = exp2data %>%
+  group_by(behavior) %>%
+  filter(time_pressure == "Minus", behavior %in% c("C", "D", "P")) %>%
+  summarize(count = n()) %>%
+  ungroup() %>%
+  mutate(proportion = count/sum(count))
+
+exp2data_tp_minus_times = exp2data %>%
+  group_by(behavior) %>%
+  filter(time_pressure == "Minus", behavior %in% c("C", "D", "P")) %>%
+  summarize(mean_dt = mean1(behaviorTime_sec),
+            se_mean_dt = se_mean(behaviorTime_sec),
+            LL_mean = mean_dt - 1.96*se_mean_dt,
+            UL_mean = mean_dt + 1.96*se_mean_dt)
+
+exp2data_tp_minus_CI = MultinomCI(c(2013, 2893, 341), sides = "two.sided")
+```
+
+```{r}
+# Behavior breakdown - Experiment B, TP-
+exp2data_tp_minus_count = exp2data %>%
+  group_by(behavior) %>%
+  filter(time_pressure == "Minus", behavior %in% c("C", "D", "P")) %>%
+  summarize(count = n()) %>%
+  ungroup() %>%
+  mutate(proportion = count/sum(count))
+
+exp2data_tp_minus_CI = MultinomCI(c(2013, 2893, 341), sides = "two.sided")
+```
+
+```{r}
+# Behavior breakdown - Experiment B, TP+
+exp2data_tp_plus_count = exp2data %>%
+  group_by(behavior) %>%
+  filter(time_pressure == "Plus", behavior %in% c("C", "D", "P")) %>%
+  summarize(count = n()) %>%
+  ungroup() %>%
+  mutate(proportion = count/sum(count))
+
+exp2data_tp_plus_CI = MultinomCI(c(2172, 2897, 338), sides = "two.sided")
+```
+
+### Network characteristics
+
+#### Experiment 1
+
+```{r}
+mean1(exp1data$degree)
+min(exp1data$degree, na.rm = T)
+max(exp1data$degree, na.rm = T)
+```
+
+#### Experiment 2
+
+```{r}
+mean1(exp2data$degree)
+min(exp2data$degree, na.rm = T)
+max(exp2data$degree, na.rm = T)
+```
+
+### Decision times
+
+#### Experiment 1
+
+```{r}
+data1_times = exp1data %>%
+  group_by(behavior) %>%
+  filter(behavior %in% c("C", "D", "P")) %>%
+  summarize(mean_dt = mean1(behaviorTime_sec),
+            se_mean_dt = se_mean(behaviorTime_sec),
+            LL_mean = mean_dt - 1.96*se_mean_dt,
+            UL_mean = mean_dt + 1.96*se_mean_dt)
+```
+
+#### Experiment 2
+
+```{r}
+exp2data %>%
+  group_by(behavior, time_pressure) %>%
+  filter(behavior %in% c("C", "D", "P")) %>%
+  summarize(mean_dt = mean1(behaviorTime_sec),
+            se_mean_dt = se_mean(behaviorTime_sec),
+            UL_mean = mean_dt + 1.96*se_mean_dt,
+            LL_mean = mean_dt - 1.96*se_mean_dt)
+```
+
+# 3. Regression Modeling
+
+### Punishment vs. time pressure
+
+```{r}
+m1 = glmer(behavior_punish ~ time_pressure + round + (1|game) + (1|superid),  
+           data = exp2data %>% filter(round > 0), family = binomial, nAGQ=0, 
+           control = glmerControl(optimizer = c("bobyqa"), 
+                                  optCtrl=list(maxfun=2e5), 
+                                  calc.derivs=FALSE))
+summary(m1)
+# p = 0.475
+```
+
+### Cooperation vs. time pressure
+
+```{r}
+m1.1 = glmer(behavior_coop ~ time_pressure + round + (1|game) + (1|superid),  
+             data = exp2data %>% filter(round > 0), family = binomial, nAGQ=0, 
+             control = glmerControl(optimizer = c("bobyqa"), 
+                                    optCtrl=list(maxfun=2e5), 
+                                    calc.derivs=FALSE))
+summary(m1.1)
+# p = 0.661
+```
+
+### Defection vs. time pressure
+
+```{r}
+m1.2 = glmer(behavior_defect ~ time_pressure + round + (1|game) + (1|superid), 
+             data = exp2data %>% filter(round > 0), family = binomial, nAGQ=0, 
+             control = glmerControl(optimizer = c("bobyqa"), 
+                                    optCtrl=list(maxfun=2e5), 
+                                    calc.derivs=FALSE))
+
+summary(m1.2)
+# p = 0.758
+```
+
+### Decision times vs. time pressure (not useful)
+
+```{r}
+model_dt_coop = lmer(behaviorTime_sec ~ time_pressure + round + (1|game) + (1|superid),  
+                     data = exp2data %>% filter(round > 0, behavior_coop == 1))
+summary(model_dt_coop)
+```
+
+```{r}
+model_dt_def = lmer(behaviorTime_sec ~ time_pressure + round + (1|game) + (1|superid),  
+                    data = exp2data %>% filter(round > 0, behavior_defect == 1))
+summary(model_dt_def)
+```
+
+```{r}
+model_dt_pun = lmer(behaviorTime_sec ~ time_pressure + round + (1|game) + (1|superid),  
+                    data = exp2data %>% filter(round > 0, behavior_punish == 1))
+summary(model_dt_pun)
+```
+
+### Punishment mechanisms vs. time pressure
+
+#### Punishment for copying/retaliation
+
+```{r}
+m2.1 = glmer(punish_type_CR ~ time_pressure + round + (1|game) + (1|superid),  
+             data = exp2data %>% filter(round > 0), family = binomial, nAGQ=0, 
+             control = glmerControl(optimizer = c("bobyqa"),
+                                    optCtrl=list(maxfun=2e5), 
+                                    calc.derivs=FALSE))
+
+summary(m2.1)
+# p = 0.89
+```
+
+#### Punishment for negative reinforcement
+
+```{r}
+m2.2 = glmer(punish_type_NR ~ time_pressure + round + (1|game) + (1|superid), 
+             data = exp2data %>% filter(round > 0), family = binomial, nAGQ=0, 
+             control = glmerControl(optimizer = c("bobyqa"), 
+                                    optCtrl=list(maxfun=2e5), 
+                                    calc.derivs=FALSE))
+
+summary(m2.2)
+# p = 0.629
+```
+
+#### Punishment for inequality aversion
+
+```{r}
+m2.3 = glmer(punish_type_IA ~ time_pressure + round + (1|game) + (1|superid),  
+             data = exp2data %>% filter(round > 0), family = binomial, nAGQ=0, 
+             control = glmerControl(optimizer = c("bobyqa"), 
+                                    optCtrl=list(maxfun=2e5), 
+                                    calc.derivs=FALSE))
+summary(m2.3)
+# p = 0.435
+```
+
+#### Unclassified punishment
+
+```{r}
+m2.4 = glmer(punish_type_U ~ time_pressure + round + (1|game) + (1|superid),  
+             data = exp2data %>% filter(round > 0), family = binomial, nAGQ=0, 
+             control = glmerControl(optimizer = c("bobyqa"), 
+                                    optCtrl=list(maxfun=2e5), 
+                                    calc.derivs=FALSE))
+summary(m2.4)
+# p = 0.649
+```
+
+### Decision time as the outcome
+
+#### Exp 1 - Cooperation as reference
+
+```{r}
+m4 = lmer(behaviorTime_sec ~ behavior + round + (1|game) + (1|superid), data = exp1data)
+summary(m4)
+```
+
+#### Exp 1 - Defection as reference
+
+```{r}
+m4_1 = lmer(behaviorTime_sec ~ factor(behavior, levels = c("D", "C", "P")) + 
+              round + (1|game) + (1|superid), data = exp1data)
+summary(m4_1)
+```
+
+#### Exp 1 - Comparing the punishment mechanisms - CR punishment is the reference
+
+```{r}
+m4_2 = lmer(behaviorTime_sec ~ punish_type_NR + punish_type_IA + punish_type_U +
+              round + (1|game) + (1|superid), 
+            data = exp1data %>% filter(behavior_punish == 1))
+summary(m4_2)
+```
+
+#### Exp 1 - Comparing copying/retaliation punishment vs. all others
+
+```{r}
+m4_2_1 = lmer(behaviorTime_sec ~ punish_type_CR + round + (1|game) + (1|superid), 
+              data = exp1data %>%
+  filter(behavior_punish == 1))
+summary(m4_2_1)
+```
+
+#### Exp 1 - Comparing unclassified punishment vs. all others
+
+```{r}
+m4_2_2 = lmer(behaviorTime_sec ~ punish_type_U + round + (1|game) + (1|superid),
+              data = exp1data %>%
+  filter(behavior_punish == 1))
+summary(m4_2_2)
+```
+
+#### Exp 1 - Regression model with and without punishment in round t-1
+
+```{r}
+m13 = lmer(behaviorTime_sec ~ round + last_punished + (1|game) + (1|superid), 
+           data = exp1data %>% filter(behavior_punish == 1))
+
+summary(m13)
+```
+
+#### Exp 2 - Controlling for time pressure
+
+##### Time pressure +
+
+```{r}
+exp2_tp_plus = exp2data %>% filter(time_pressure == "Plus")
+exp2_tp_minus = exp2data %>% filter(time_pressure == "Minus")
+
+m5a = lmer(behaviorTime_sec ~ behavior + round + (1|game) + (1|superid), 
+           data = exp2_tp_plus %>% filter(round > 0))
+summary(m5a)
+```
+
+##### Time pressure -
+
+```{r}
+m5b = lmer(behaviorTime_sec ~ behavior + round + (1|game) + (1|superid), 
+           data = exp2_tp_minus %>% filter(round > 0))
+
+summary(m5b)
+```
+
+# 4. Figures
+
+## Figure 2 - Behavior Distribution, Decision Times, and Punishment Mechanisms, Experiment 1
+
+```{r, message = F}
+# Fig 1A
+exp1_fig1_data = bind_cols(data1_behavior_count, data1_behavior_CI, data1_times)[-7] 
+
+names(exp1_fig1_data) = c("behavior", "count", "crude_prop", "adjusted_prop", 
+                          "LL_prop", "UL_prop", "mean_dt", "se_mean_dt", 
+                          "UL_mean_dt", "LL_mean_dt")
+exp1_fig1_data = exp1_fig1_data %>% 
+  mutate(behavior = case_match(behavior,
+                               "C" ~ "Cooperation", 
+                               "D" ~ "Defection",
+                               "P" ~ "Punishment"))
+```
+
+```{r}
+exp1_fig1_A = exp1_fig1_data %>%
+  ggplot() +
+  aes(x = behavior, y = adjusted_prop, fill = behavior) +
+  geom_bar(stat = "identity", width = 0.75, alpha = 0.5) +
+  geom_errorbar(aes(ymin = LL_prop, ymax = UL_prop, color = factor(behavior)), 
+                width = 0) +
+  theme_classic() +
+  scale_y_continuous(limits = c(0, 0.6), breaks = seq(0, 0.6, by = 0.2), 
+                     expand = c(0, 0)) +
+  ylab("Proportion") +
+  scale_fill_manual(values = c("#00A5CF", "#FFBF00", "#574AE2")) +
+  scale_color_manual(values = c("dodgerblue4", "darkorange3", "#574AE2")) +
+  labs(tag = "A") +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        legend.position = "none",
+        axis.text.x = element_text(size = 9),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank())
+exp1_fig1_A
+```
+
+```{r}
+exp1_fig1_B = exp1_fig1_data %>%
+  ggplot() +
+  aes(x = behavior, y = mean_dt, fill = behavior) +
+  geom_bar(stat = "identity", width = 0.75, alpha = 0.5) +
+  geom_errorbar(aes(ymin = mean_dt - 1.96*se_mean_dt, 
+                    ymax = mean_dt + 1.96*se_mean_dt, 
+                    color = factor(behavior)), width = 0) +
+  theme_classic() +
+  scale_y_continuous(limits = c(0, 8.5), breaks = seq(0, 8, by = 2), 
+                     expand = c(0, 0)) +
+  ylab("Decision time \n (seconds)")+
+  scale_fill_manual(values = c("#00A5CF", "#FFBF00", "#574AE2")) +
+  scale_color_manual(values = c("dodgerblue4", "darkorange3", "#574AE2")) +
+  labs(tag = "B") + 
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        legend.position = "none",
+        axis.text.x = element_text(size = 9),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank())
+exp1_fig1_B
+```
+
+```{r}
+exp1data_NR = exp1data %>% 
+  group_by(punish_type_NR) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(punish_type = "NR",
+         total = sum(n),
+         perc = n/sum(n),
+         se_perc = sqrt((perc*(1-perc))/total)) %>%
+  filter(punish_type_NR == 1)  %>%
+  select(punish_type, n, total, perc, se_perc)
+
+exp1data_IA = exp1data %>% 
+  group_by(punish_type_IA) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(punish_type = "IA",
+         total = sum(n),
+         perc = n/sum(n),
+         se_perc = sqrt((perc*(1-perc))/total)) %>%
+  filter(punish_type_IA == 1)  %>%
+  select(punish_type, n, total, perc, se_perc)
+
+exp1data_CR = exp1data %>% 
+  group_by(punish_type_CR) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(punish_type = "CR",
+         total = sum(n),
+         perc = n/sum(n),
+         se_perc = sqrt((perc*(1-perc))/total)) %>%
+  filter(punish_type_CR == 1)  %>%
+  select(punish_type, n, total, perc, se_perc)
+
+exp1data_U = exp1data %>% 
+  group_by(punish_type_U) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(punish_type = "U",
+         total = sum(n),
+         perc = n/sum(n),
+         se_perc = sqrt((perc*(1-perc))/total)) %>%
+  filter(punish_type_U == 1)  %>%
+  select(punish_type, n, total, perc, se_perc)
+
+figS1data = bind_rows(exp1data_CR, exp1data_IA, exp1data_NR, exp1data_U)
+
+figS1data = figS1data %>%
+  mutate(perc_LL = perc - 1.96*se_perc,
+         perc_UL = perc + 1.96*se_perc)
+```
+
+```{r}
+# Decision times by punish type
+
+exp1data_NR_times = exp1data %>% 
+  filter(punish_type_NR == 1, behavior_punish == 1) %>%
+  summarize(mean_dt = mean1(behaviorTime_sec),
+            se_mean_dt = se_mean(behaviorTime_sec)) %>%
+  mutate(punish_type = "NR",
+         mean_LL = mean_dt - 1.96*se_mean_dt,
+         mean_UL = mean_dt + 1.96*se_mean_dt) 
+
+exp1data_IA_times = exp1data %>% 
+  filter(punish_type_IA == 1, behavior_punish == 1) %>%
+  summarize(mean_dt = mean1(behaviorTime_sec),
+            se_mean_dt = se_mean(behaviorTime_sec),
+) %>%
+  mutate(punish_type = "IA",   mean_LL = mean_dt - 1.96*se_mean_dt,
+         mean_UL = mean_dt + 1.96*se_mean_dt) 
+
+exp1data_CR_times = exp1data %>% 
+  filter(punish_type_CR == 1, behavior_punish == 1) %>%
+  summarize(mean_dt = mean1(behaviorTime_sec),
+            se_mean_dt = se_mean(behaviorTime_sec)) %>%
+  mutate(punish_type = "CR",
+           mean_LL = mean_dt - 1.96*se_mean_dt,
+         mean_UL = mean_dt + 1.96*se_mean_dt) 
+
+exp1data_U_times = exp1data %>% 
+  filter(punish_type_U == 1, behavior_punish == 1) %>%
+  summarize(mean_dt = mean1(behaviorTime_sec),
+            se_mean_dt = se_mean(behaviorTime_sec)) %>%
+  mutate(punish_type = "U",
+         mean_LL = mean_dt - 1.96*se_mean_dt,
+         mean_UL = mean_dt + 1.96*se_mean_dt) 
+
+exp1data_punish_types_times = bind_rows(exp1data_NR_times, 
+                                        exp1data_CR_times,
+                                        exp1data_IA_times, 
+                                        exp1data_U_times) %>% 
+  select(punish_type, mean_dt, se_mean_dt, mean_LL, mean_UL)
+
+fig1data = figS1data %>%
+  left_join(exp1data_punish_types_times, by = "punish_type") %>%
+  mutate(punish_type = case_match(punish_type,
+             "CR" ~ "Copying/retaliation",
+             "IA" ~ "Inequality aversion",
+             "NR" ~ "Negative reinforcement",
+             "U" ~ "Unclassified")) %>%
+  mutate(punish_type_fct = factor(punish_type, levels = c("Copying/retaliation", "Negative reinforcement", "Inequality aversion", "Unclassified")))
+```
+
+```{r}
+exp1_fig1_C = fig1data %>%
+  ggplot(aes(x = punish_type_fct, y = perc, fill = punish_type_fct)) +
+  geom_bar(position = "dodge", stat = "identity", alpha = 0.5, show.legend = F) +
+  geom_errorbar(aes(ymin = perc + 1.96*se_perc, 
+                    ymax = perc - 1.96*se_perc,
+                    width = 0),
+                color = "purple4",
+                position = position_dodge(.9),
+                show.legend = F) +
+  scale_fill_manual(values = c("Copying/retaliation" = "plum3", 
+                               "Negative reinforcement" = "mediumslateblue", 
+                               "Inequality aversion" = "mediumpurple3", 
+                               "Unclassified" = "orchid4"), guide = "none") +
+  scale_color_manual(guide = "none") +
+  scale_x_discrete(labels = c("Copying/\nretaliation", "Negative\nreinforcement", 
+                              "Inequality\naversion", "Unclassified")) +
+  scale_y_continuous(limits = c(0, 0.05), expand = c(0, 0)) +
+  ylab("Proportion") +
+  xlab("") +
+  labs(tag = "C") +
+  theme_classic() +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        legend.position = "bottom",
+        legend.title = element_blank(),
+        axis.text.x = element_text(size = 8),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank()) 
+exp1_fig1_C
+```
+
+```{r}
+exp1_fig1_D = fig1data %>%
+  ggplot(aes(x = punish_type_fct, y = mean_dt, fill = punish_type_fct)) +
+  geom_bar(stat = "identity", width = 0.75,  alpha = 0.5) +
+  geom_errorbar(aes(ymin = mean_LL, 
+                    ymax = mean_UL),
+                color = "purple4", width = 0) +
+  theme_classic() +
+  scale_y_continuous(limits = c(0, 10), breaks = seq(0, 10, by = 2), expand = c(0, 0)) +
+  ylab("Decision time \n (seconds)")+
+  scale_fill_manual(values = c("Copying/retaliation" = "plum3", 
+                               "Negative reinforcement" = "mediumslateblue", 
+                               "Inequality aversion" = "mediumpurple3", 
+                               "Unclassified" = "orchid4"), guide = "none") +
+  scale_x_discrete(labels = c("Copying/\nretaliation", "Negative\nreinforcement", 
+                              "Inequality\naversion", "Unclassified")) +
+  scale_color_manual(guide = "none") +
+  theme_classic() +
+  labs(tag = "D") +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        legend.position = "none",
+        axis.text.x = element_text(size = 8),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank())
+exp1_fig1_D
+```
+
+### Main
+
+```{r}
+(exp1_fig1_A + exp1_fig1_B)/ (exp1_fig1_C + exp1_fig1_D)
+
+# ggsave(filename = "~/Documents/Projects/harming_esn/figures/fig2.png", 
+#        width = 8, height = 8, units = "in")
+```
+
+## Figure 3 - Behavior Distribution, Decision Times, and Punishment Mechanisms, Experiment 2
+
+```{r, message = F}
+exp2_tp_plus_fig3_data = bind_cols(exp2data_tp_plus_count, exp2data_tp_plus_CI, 
+                                   exp2data_tp_plus_times)[-7]
+names(exp2_tp_plus_fig3_data) = c("behavior", "count", "crude_prop", 
+                                  "adjusted_prop", "LL_prop", "UL_prop", "mean_dt", 
+                                  "se_mean_dt", "LL_mean_dt", "UL_mean_dt")
+exp2_tp_plus_fig3_data$setting = "TP+"
+
+exp2_tp_minus_fig3_data = bind_cols(exp2data_tp_minus_count, exp2data_tp_minus_CI, 
+                                    exp2data_tp_minus_times)[-7]
+names(exp2_tp_minus_fig3_data) = c("behavior", "count", "crude_prop", 
+                                  "adjusted_prop", "LL_prop", "UL_prop", "mean_dt", 
+                                  "se_mean_dt", "LL_mean_dt", "UL_mean_dt")
+
+exp2_tp_minus_fig3_data$setting = "TP-"
+
+fig3data = bind_rows(exp2_tp_minus_fig3_data, exp2_tp_plus_fig3_data)
+
+fig3data = fig3data %>%
+  mutate(behavior = case_match(behavior, "C" ~ "Cooperation", 
+                               "D" ~ "Defection", "P" ~ "Punishment"))
+```
+
+### Main
+
+```{r}
+fig3A = fig3data %>%
+  ggplot(aes(x = behavior, y = adjusted_prop, fill = behavior, pattern = setting)) +
+  geom_bar_pattern(position = "dodge", stat = "identity", alpha = 0.5, 
+                   pattern_density = 0.4, pattern_color = "white", 
+                   pattern_shape = 3) +
+  geom_errorbar(aes(ymin = LL_prop, 
+                    ymax = UL_prop,
+                    color = behavior,
+                    width = 0),
+                position = position_dodge(.9),
+                show.legend = F) +
+  scale_pattern_manual(values = c("none", "pch")) +
+  scale_fill_manual(values = c("Cooperation" = "#00A5CF", "Defection" = "#FFBF00", 
+                               "Punishment" = "#574AE2")) +
+  scale_color_manual(values = c("dodgerblue4", "darkorange3", "#574AE2")) +
+  scale_y_continuous(limits = c(0, 0.65), expand = c(0, 0)) +
+  guides(color = "none", fill = "none", pattern = guide_legend(title = "Setting")) +
+  ylab("Proportion") +
+  xlab("") +
+  theme_classic() +
+  labs(tag = "A") +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        axis.text.x = element_text(size = 10),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank(),
+        legend.position = "bottom",
+        legend.key.size = unit(1, "cm"),
+        legend.key = element_rect(fill = "#574AE2", color = NA)) +
+  annotate("text", x = 1:3, 
+           y = c(0.46, 0.61, 0.12), 
+           label = c("italic(p) == 0.661", "italic(p) == 0.758", "italic(p) == 0.475"), 
+           parse = T) 
+fig3A
+```
+
+```{r, warning = F}
+fig3B = fig3data %>%
+  ggplot() +
+  aes(x = behavior, y = mean_dt, fill = behavior, pattern = setting) +
+  geom_bar_pattern(stat = "identity", width = 0.75, alpha = 0.5, 
+                   position = "dodge",
+                   pattern_density = 0.4, 
+                   pattern_color = "white", 
+                   pattern_shape = 3, show.legend = F) +
+  geom_errorbar(aes(ymin = mean_dt - se_mean_dt, 
+                    ymax = mean_dt + se_mean_dt, 
+                    color = factor(behavior)), 
+                    position = position_dodge(0.75),
+                    width = 0,
+                show.legend = F) +
+  geom_hline(yintercept = 3, color = "red2", alpha = 0.3) +
+  theme_classic() +
+  scale_pattern_manual(values = c("none", "pch")) +
+  scale_y_continuous(limits = c(0, 5), expand = c(0, 0)) +
+  scale_x_discrete(limits = c("Cooperation", "Defection", "Punishment")) +
+  ylab("Decision time \n (seconds)")+
+  scale_fill_manual(values = c("#00A5CF", "#FFBF00", "#574AE2")) +
+  scale_color_manual(values = c("dodgerblue4", "darkorange3", "#574AE2")) +
+  labs(tag = "B") +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        legend.position = "none",
+        axis.text.x = element_text(size = 10),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank()) +
+    annotate("text", x = 1:3, 
+           y = c(3.45, 3.25, 4.25), 
+           label = c(rep(expression(paste(italic("p")," < 0.0001")), 3)))
+
+fig3B
+```
+
+```{r}
+fig3A + fig3B +
+  plot_annotation(tag_levels = c("A", "B")) +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "bottom") 
+
+# ggsave(filename = "~/Documents/Projects/harming_esn/figures/fig3.png", 
+# width = 7, height = 5, units = "in")
+```
+
+## Figure 4 - Punishment Mechanism Decision Times, Experiment 2
+
+```{r}
+# Get the frequencies stratified by TP status and by punishment type
+exp2data = exp2data %>%
+  mutate(punish_type_U = 
+           ifelse(is.na(punish_type_CR) == 1 & is.na(punish_type_NR) == 1 | 
+                    is.na(punish_type_IA) == 1 & is.na(punish_type_U) == 1, 
+                  1, punish_type_U),
+         punish_type_CR = ifelse(punish_type_U == 1, 0, punish_type_CR),
+         punish_type_NR = ifelse(punish_type_U == 1, 0, punish_type_NR),
+         punish_type_IA = ifelse(punish_type_U == 1, 0, punish_type_IA))
+                    
+fig4_tp_minus_CR = exp2data %>% 
+  filter(time_pressure == "Minus") %>%
+  group_by(punish_type_CR) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(setting = "TP-",
+         punish_type = "CR",
+         total = sum(n),
+         perc = n/sum(n),
+         se_perc = sqrt((perc*(1-perc))/total)) %>%
+  filter(punish_type_CR == 1)  %>%
+  select(setting, punish_type, n, total, perc, se_perc)
+
+fig4_tp_minus_IA = exp2data %>% 
+  filter(time_pressure == "Minus") %>%
+  group_by(punish_type_IA) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(setting = "TP-",
+         punish_type = "IA",
+         total = sum(n),
+         perc = n/sum(n),
+         se_perc = sqrt((perc*(1-perc))/total)) %>%
+  filter(punish_type_IA == 1)  %>%
+  select(setting, punish_type, n, total, perc, se_perc)
+
+fig4_tp_minus_NR = exp2data %>% 
+  filter(time_pressure == "Minus") %>%
+  group_by(punish_type_NR) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(setting = "TP-",
+         punish_type = "NR",
+         total = sum(n),
+         perc = n/sum(n),
+         se_perc = sqrt((perc*(1-perc))/total)) %>%
+  filter(punish_type_NR == 1)  %>%
+  select(setting, punish_type, n, total, perc, se_perc)
+
+fig4_tp_minus_U = exp2data %>% 
+  filter(time_pressure == "Minus") %>%
+  group_by(punish_type_U) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(setting = "TP-",
+         punish_type = "U",
+         total = sum(n),
+         perc = n/sum(n),
+         se_perc = sqrt((perc*(1-perc))/total)) %>%
+  filter(punish_type_U == 1)  %>%
+  select(setting, punish_type, n, total, perc, se_perc)
+
+fig4_tp_minus_data = bind_rows(fig4_tp_minus_CR, fig4_tp_minus_IA, 
+                               fig4_tp_minus_NR, fig4_tp_minus_U)
+```
+
+```{R}
+fig4_tp_Plus_CR = exp2data %>% 
+  filter(time_pressure == "Plus") %>%
+  group_by(punish_type_CR) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(setting = "TP+",
+         punish_type = "CR",
+         total = sum(n),
+         perc = n/sum(n),
+         se_perc = sqrt((perc*(1-perc))/total)) %>%
+  filter(punish_type_CR == 1)  %>%
+  select(setting, punish_type, n, total, perc, se_perc)
+
+fig4_tp_Plus_IA = exp2data %>% 
+  filter(time_pressure == "Plus") %>%
+  group_by(punish_type_IA) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(setting = "TP+",
+         punish_type = "IA",
+         total = sum(n),
+         perc = n/sum(n),
+         se_perc = sqrt((perc*(1-perc))/total)) %>%
+  filter(punish_type_IA == 1)  %>%
+  select(setting, punish_type, n, total, perc, se_perc)
+
+fig4_tp_Plus_NR = exp2data %>% 
+  filter(time_pressure == "Plus") %>%
+  group_by(punish_type_NR) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(setting = "TP+",
+         punish_type = "NR",
+         total = sum(n),
+         perc = n/sum(n),
+         se_perc = sqrt((perc*(1-perc))/total)) %>%
+  filter(punish_type_NR == 1)  %>%
+  select(setting, punish_type, n, total, perc, se_perc)
+
+fig4_tp_Plus_U = exp2data %>% 
+  filter(time_pressure == "Plus") %>%
+  group_by(punish_type_U) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(setting = "TP+",
+         punish_type = "U",
+         total = sum(n),
+         perc = n/sum(n),
+         se_perc = sqrt((perc*(1-perc))/total)) %>%
+  filter(punish_type_U == 1)  %>%
+  select(setting, punish_type, n, total, perc, se_perc)
+
+fig4_tp_Plus_data = bind_rows(fig4_tp_Plus_CR, fig4_tp_Plus_IA, 
+                              fig4_tp_Plus_NR, fig4_tp_Plus_U)
+
+exp2data_combined = bind_rows(fig4_tp_minus_data, fig4_tp_Plus_data)
+
+```
+
+```{r}
+exp2data_plus_NR_times = exp2data %>% 
+  filter(punish_type_NR == 1, 
+         behavior_punish == 1, 
+         time_pressure == "Plus") %>%
+  summarize(mean_dt = mean1(behaviorTime_sec),
+            se_mean_dt = se_mean(behaviorTime_sec)) %>%
+  mutate(punish_type = "NR",
+         setting = "TP+",
+           mean_LL = mean_dt - 1.96*se_mean_dt,
+         mean_UL = mean_dt + 1.96*se_mean_dt) 
+
+exp2data_plus_CR_times = exp2data %>% 
+  filter(punish_type_CR == 1, 
+         behavior_punish == 1, 
+         time_pressure == "Plus") %>%
+  summarize(mean_dt = mean1(behaviorTime_sec),
+            se_mean_dt = se_mean(behaviorTime_sec)) %>%
+  mutate(punish_type = "CR",
+         setting = "TP+",
+         mean_LL = mean_dt - 1.96*se_mean_dt,
+         mean_UL = mean_dt + 1.96*se_mean_dt) 
+
+exp2data_plus_IA_times = exp2data %>% 
+  filter(punish_type_IA == 1, 
+         behavior_punish == 1, 
+         time_pressure == "Plus") %>%
+  summarize(mean_dt = mean1(behaviorTime_sec),
+            se_mean_dt = se_mean(behaviorTime_sec)) %>%
+  mutate(punish_type = "IA",
+                  setting = "TP+",
+           mean_LL = mean_dt - 1.96*se_mean_dt,
+         mean_UL = mean_dt + 1.96*se_mean_dt) 
+
+exp2data_plus_U_times = exp2data %>% 
+  filter(punish_type_U == 1, 
+         behavior_punish == 1, 
+         time_pressure == "Plus") %>%
+  summarize(mean_dt = mean1(behaviorTime_sec),
+            se_mean_dt = se_mean(behaviorTime_sec)) %>%
+  mutate(punish_type = "U",
+         setting = "TP+",
+         mean_LL = mean_dt - 1.96*se_mean_dt,
+         mean_UL = mean_dt + 1.96*se_mean_dt) 
+
+exp2data_minus_NR_times = exp2data %>% 
+  filter(punish_type_NR == 1, 
+         behavior_punish == 1, 
+         time_pressure == "Minus") %>%
+  summarize(mean_dt = mean1(behaviorTime_sec),
+            se_mean_dt = se_mean(behaviorTime_sec)) %>%
+  mutate(punish_type = "NR",
+                  setting = "TP-",
+           mean_LL = mean_dt - 1.96*se_mean_dt,
+         mean_UL = mean_dt + 1.96*se_mean_dt) 
+
+exp2data_minus_CR_times = exp2data %>% 
+  filter(punish_type_CR == 1, 
+         behavior_punish == 1, 
+         time_pressure == "Minus") %>%
+  summarize(mean_dt = mean1(behaviorTime_sec),
+            se_mean_dt = se_mean(behaviorTime_sec)) %>%
+  mutate(punish_type = "CR",
+         setting = "TP-",
+        mean_LL = mean_dt - 1.96*se_mean_dt,
+         mean_UL = mean_dt + 1.96*se_mean_dt) 
+
+exp2data_minus_IA_times = exp2data %>% 
+  filter(punish_type_IA == 1, 
+         behavior_punish == 1, 
+         time_pressure == "Minus") %>%
+  summarize(mean_dt = mean1(behaviorTime_sec),
+            se_mean_dt = se_mean(behaviorTime_sec)) %>%
+  mutate(punish_type = "IA",
+         setting = "TP-",
+         mean_LL = mean_dt - 1.96*se_mean_dt,
+         mean_UL = mean_dt + 1.96*se_mean_dt) 
+
+exp2data_minus_U_times = exp2data %>% 
+  filter(punish_type_U == 1, 
+         behavior_punish == 1, 
+         time_pressure == "Minus") %>%
+  summarize(mean_dt = mean1(behaviorTime_sec),
+            se_mean_dt = se_mean(behaviorTime_sec)) %>%
+  mutate(punish_type = "U",
+         setting = "TP-",
+         mean_LL = mean_dt - 1.96*se_mean_dt,
+         mean_UL = mean_dt + 1.96*se_mean_dt) 
+
+exp2data_times = bind_rows(exp2data_minus_CR_times, exp2data_minus_IA_times, 
+                           exp2data_minus_NR_times, exp2data_minus_U_times,
+                           exp2data_plus_CR_times, exp2data_plus_IA_times, 
+                           exp2data_plus_NR_times, exp2data_plus_U_times)
+```
+
+### Main
+
+```{r}
+# Create the combined figure
+exp2data_combined = exp2data_combined %>%
+         mutate(punish_type_fct = factor(punish_type, 
+                                         levels = c("CR", "NR", "IA", "U")))
+         
+exp2data_combined %>%
+  ggplot(aes(x = punish_type_fct, y = perc, fill = punish_type_fct, 
+             pattern = setting)) +
+  geom_bar_pattern(position = "dodge", stat = "identity", alpha = 0.5, 
+                   pattern_density = 0.25, pattern_color = "white", 
+                   pattern_shape = 3) +
+  geom_errorbar(aes(ymin = perc + 1.96*se_perc, 
+                    ymax = perc - 1.96*se_perc,
+                    width = 0),
+                    color = "purple4",
+                position = position_dodge(.9),
+                show.legend = F) +
+  scale_pattern_manual(values = c("none", "pch")) +
+  guides(color = "none", fill = "none", 
+         pattern = guide_legend(title = "Setting")) +
+  annotate("text", x = 1:4, 
+           y = c(0.025, 0.0425, 0.045, 0.02), 
+           label = c("italic(p) == 0.889", "italic(p) == 0.629", 
+                     "italic(p) == 0.435", "italic(p) == 0.649"), 
+           parse = T) +
+  scale_fill_manual(values = c("CR" = "plum3", 
+                               "NR" = "mediumslateblue", 
+                               "IA" = "mediumpurple3", 
+                               "U" = "orchid4"), 
+                    limits = c("CR", "NR", "IA", "U"),
+                    guide = "none") +
+  scale_x_discrete(labels = c("Copying/\nretaliation", "Negative\nreinforcement",
+                              "Inequality\naversion", "Unclassified")) +
+  scale_y_continuous(limits = c(0, 0.05), expand = c(0, 0)) +
+  ylab("Proportion") +
+  xlab("") +
+  theme_classic() +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        legend.position = "bottom",
+        legend.key.size = unit(1, "cm"),
+        legend.key = element_rect(fill = "#574AE2", color = NA),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank()) 
+
+# ggsave(filename = "~/Documents/Projects/harming_esn/figures/fig4.png", 
+# width = 7, height = 5, units = "in")
+```
+
+## Figure S2 - Distribution of Decision Times, Experiment 1
+
+```{r, warning = F}
+exp1data %>%
+  filter(is.na(behaviorTime_prompt/1000) == 0, behavior %in% c("C", "D", "P")) %>%
+  ggplot(aes(x = behaviorTime_prompt/1000, color = behavior)) +
+  geom_density(adjust = 2, key_glyph = "path") +
+  geom_vline(xintercept = 3, color = "red2", linetype = "dashed") +
+  theme_classic() +
+  labs(color = "Behavior") +
+  xlab("Decision Time (sec)") +
+  scale_x_log10(limits = c(1, 110),breaks = c(1, 10, 100), 
+                name = "Decision Time (sec)") +
+  scale_y_continuous(limits = c(0, 2), name = "Density") + 
+  scale_color_manual(labels = c("Cooperation", "Defection", "Punishment"),
+                     values = c("#00A5CF", "#FFBF00", "#574AE2"), guide = "none") +
+  guides(colour=guide_legend(title = NULL)) +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        legend.position = c(0.9, 0.9),
+        legend.title = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank()) 
+
+# ggsave(filename = "~/Documents/Projects/harming_esn/figures/figS2.png", 
+# width = 7, height = 5, units = "in")
+```
