@@ -55,11 +55,11 @@ Data/.DS_Store
 .DS_Store
 
 # Hide old unused directories
-markdowns/
-manuscript/
-figures/archive/
-archive/
-assignment/
-ref/
+/markdowns/
+/manuscript/
+/figures/archive/
+/archive/
+/assignment/
+/ref/
 
 
