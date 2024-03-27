@@ -20,6 +20,7 @@
 
 # RStudio files
 .Rproj.user/
+,Rproj
 
 # produced vignettes
 vignettes/*.html
@@ -52,3 +53,13 @@ rsconnect/
 *.csv
 Data/.DS_Store
 .DS_Store
+
+# Hide old unused directories
+markdowns/
+manuscript/
+figures/archive/
+archive/
+assignment/
+ref/
+
+
