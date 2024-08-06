@@ -63,21 +63,26 @@ exp1_rewiring %>%
             se_rewire = se_mean(rewired))
 
 ## Regression for rewiring and punishment for Exp. 1 ---------------------------
-m_rwr_e1 = glmer(rewired ~ behavior_punish + round + (1|game) + (1|superid), 
-              data = exp1_rewiring %>% filter(round > 0, behavior %in% c('C', 'D', 'P')),
-      family = 'binomial', nAGQ=0, 
-      control = glmerControl(optimizer = c("bobyqa"), 
-                             optCtrl=list(maxfun=2e5), 
-                             calc.derivs=FALSE))
-tidy(m_rwr_e1, exponentiate = T) 
+model_e1_rwr = glmer(rewired ~ behavior_punish + round + (1|game) + (1|superid), 
+                     data = exp1data %>% filter(round > 0,
+                                                behavior %in% c("C", "D", "P")),
+                     family = 'binomial', nAGQ=0, 
+                     control = glmerControl(optimizer = c("bobyqa"), 
+                                            optCtrl=list(maxfun=2e5), 
+                                            calc.derivs=FALSE))
+tidy(model_e1_rwr, exponentiate = TRUE) %>%
+  as.data.frame()
 
-summary(glmer(rewired ~ behavior_defect + round + (1|game) + (1|superid), 
-              data = exp1_rewiring %>% filter(round > 0),
-              family = 'binomial', nAGQ=0, 
-              control = glmerControl(optimizer = c("bobyqa"), 
-                                     optCtrl=list(maxfun=2e5), 
-                                     calc.derivs=FALSE)))
+exp1data = exp1data %>%
+  left_join(exp1_rewiring, by = c('superid', 'round', 'game'))
 
+rwr_data_only = exp1_rewiring %>% select(superid, game, round, rewired)
+
+exp1data %>% left_join(rwr_data_only, by = c('superid', 'game', 'round'))
+
+exp1data = exp1data %>% left_join(rwr_data_only, by = c('superid', 'game', 'round'))
+
+write_csv(exp1data, file = "data/final/exp1data_rev1.csv")
 
 exp1_rewiring_short = exp1_rewiring %>% select(superid, game, round, rewired)
 write_csv(exp1_rewiring_short, "~/Documents/Projects/harming_esn/data/exp1/exp1_rewiring.csv")
@@ -108,6 +113,12 @@ exp2_rewiring = exp2_rewiring %>%
 
 exp2_rewiring = exp2_rewiring %>% left_join(exp2_tp_status, by = 'superid')
 
+rwr_data_only_e2 = exp2_rewiring %>% select(superid, game, round, time_pressure,
+                                            rewired)
+
+exp2data = exp2data %>% 
+  left_join(rwr_data_only_e2, by = c('superid', 'time_pressure', 
+                                     'game', 'round'))
 # Frequency table for punishment and rewiring in Exp. 2 (TP+ and TP-) 
 exp2_rewiring %>%
   group_by(time_pressure, behavior) %>%
@@ -115,29 +126,6 @@ exp2_rewiring %>%
   summarize(prop_rewire = mean(rewired),
             se_rewire = se_mean(rewired))
 
-## Regression for punishment and rewiring, Exp. 2 (TP-) ------------------------
-m_rwr_e2_minus = glmer(rewired ~ behavior_punish + round + (1|game) + (1|superid), 
-              data = exp2_rewiring %>% filter(round > 0, 
-                                              behavior %in% c('C', 'D', 'P'),
-                                              time_pressure == 'Minus'),
-              family = 'binomial', nAGQ=0, 
-              control = glmerControl(optimizer = c("bobyqa"), 
-                                     optCtrl=list(maxfun=2e5), 
-                                     calc.derivs=FALSE))
-tidy(m_rwr_e2_minus, exponentiate = T)
- 
-## Regression for punishment and rewiring, Exp. 2 (TP+) ------------------------
-m_rwr_e2_plus = glmer(rewired ~ behavior_punish + round + (1|game) + (1|superid), 
-              data = exp2_rewiring %>% filter(round > 0, 
-                                              behavior %in% c('C', 'D', 'P'),
-                                              time_pressure == 'Plus'),
-              family = 'binomial', nAGQ=0, 
-              control = glmerControl(optimizer = c("bobyqa"), 
-                                     optCtrl=list(maxfun=2e5), 
-                                     calc.derivs=FALSE))
 
-tidy(m_rwr_e2_plus, exponentiate = T) %>%
-  as.data.frame()
 
-exp2_rewiring_short = exp2_rewiring %>% select(superid, game, round, rewired)
-write_csv(exp2_rewiring_short, '~/Documents/Projects/harming_esn/data/exp4/exp4_subdata/exp2_rewiring.csv')
+write_csv(exp2data, file = 'data/final/exp2data_rev1.csv')
