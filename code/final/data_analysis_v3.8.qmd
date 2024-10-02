@@ -1,5 +1,5 @@
 ---
-title: "Data Analysis for 'Punishment is Slower than Cooperation or Defection'"
+title: "Data Analysis for Punishment is Slower than Cooperation or Defection"
 format: 
   pdf:
     toc: true
@@ -542,9 +542,12 @@ summary(lmer(behaviorTime_sec ~ punish_type_NR + punish_type_IA + punish_type_U
 #### Evaluating effect of past round defection rate on inequality aversion punishment (Table S9)
 
 ```{r}
-IA_data_e1 = exp1data %>% filter(punish_type_IA == T) %>% mutate(high_defect_rate_lag = ifelse(local_rate_defect_lag > 0.5, 'Defect rate > 0.5', "Defect rate <= 0.5")) 
+IA_data_e1 = exp1data %>% filter(punish_type_IA == T) %>% 
+  mutate(high_defect_rate_lag = ifelse(local_rate_defect_lag > 0.5, 
+                                       'Defect rate > 0.5', "Defect rate <= 0.5")) 
 
-summary(lmer(behaviorTime_sec ~ high_defect_rate_lag + round + (1|game) + (1|superid), data = IA_data_e1))
+summary(lmer(behaviorTime_sec ~ high_defect_rate_lag + round + (1|game) + 
+               (1|superid), data = IA_data_e1))
 ```
 
 ```{r}
@@ -565,7 +568,7 @@ summary(lmer(behaviorTime_sec ~ high_defect_rate_lag +
              data = IA_data_e2 %>% filter(time_pressure == 'Plus')))
 ```
 
-#### Evaluating the effect of wealth visibility on inequality aversion punishment (Table S10, S11)
+#### Evaluating the effect of wealth visibility on inequality aversion punishment 
 
 ```{r}
 summary(glmer(punish_type_IA ~ showScore + round + (1|game) + (1|superid), 
@@ -581,7 +584,7 @@ summary(lmer(behaviorTime_sec ~ showScore + round + (1|game) + (1|superid),
              data = exp1data %>% filter(punish_type_IA == 1)))
 ```
 
-### Testing the reciprocal effect of defection for defection decisions (Table S12)
+### Testing the reciprocal effect of defection for defection decisions 
 
 ```{r}
 # Reciprocation occurs when previous round local rate is >0
@@ -612,7 +615,7 @@ summary(lmer(behaviorTime_sec ~ any_defectors_lag + round + (1|game) +
                                         time_pressure == 'Plus')))
 ```
 
-### Evaluating the effect of choosing punishment on rewiring (Supplemental Table S13)
+### Evaluating the effect of choosing punishment on rewiring 
 
 ```{r}
 ## Regression for punishment and rewiring, Exp. 1 ------------------------------
@@ -641,7 +644,8 @@ tidy(model_e2_rwr_minus, exponentiate = T) %>% as.data.frame()
 
 ```{r}
 ## Regression for punishment and rewiring, Exp. 2 (TP+) ------------------------
-model_e2_rwr_plus = glmer(rewired ~ behavior_punish + round + (1|game) + (1|superid), 
+model_e2_rwr_plus = glmer(rewired ~ behavior_punish + round + (1|game) + 
+                            (1|superid), 
               data = exp2data %>% filter(round > 0, 
                                               behavior %in% c('C', 'D', 'P'),
                                               time_pressure == 'Plus'),
@@ -836,8 +840,6 @@ fig1data = figS1data %>%
              "NR" ~ "Negative reinforcement",
              "U" ~ "Unclassified")) %>%
   mutate(punish_type_fct = factor(punish_type, levels = c("Copying/retaliation", "Negative reinforcement", "Inequality aversion", "Unclassified")))
-
-fig1data
 ```
 
 ```{r}
